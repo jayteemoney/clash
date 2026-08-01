@@ -1,0 +1,42 @@
+{
+  "name": "clash",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Skill-based tournament arena on Celo, shipped as a MiniPay Mini App.",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "eslint",
+    "typecheck": "tsc --noEmit",
+    "test": "node --import ./tests/register.mjs --test \"tests/*.test.mts\"",
+    "check:minipay": "node scripts/check-minipay-rules.mjs",
+    "check:bundle": "node scripts/check-bundle-size.mjs",
+    "check": "npm run typecheck && npm run lint && npm run check:minipay && npm test",
+    "sync:abi": "node scripts/sync-abi.mjs",
+    "wordlist": "node scripts/build-wordlist.mjs",
+    "contracts:build": "cd contracts && forge build",
+    "contracts:test": "cd contracts && forge test -vv",
+    "contracts:fmt": "cd contracts && forge fmt",
+    "e2e:local": "./scripts/e2e-local.sh",
+    "verify:all": "npm run contracts:test && npm run check"
+  },
+  "dependencies": {
+    "@celo/abis": "^17.0.4",
+    "next": "16.2.12",
+    "react": "19.2.4",
+    "react-dom": "19.2.4",
+    "server-only": "^0.0.1",
+    "viem": "^2.55.10"
+  },
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4",
+    "@types/node": "^20",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "eslint": "^9",
+    "eslint-config-next": "16.2.12",
+    "tailwindcss": "^4",
+    "typescript": "^5"
+  }
+}
