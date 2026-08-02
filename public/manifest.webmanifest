@@ -1,0 +1,13 @@
+{
+  "name": "Clash — Skill tournaments, hourly",
+  "short_name": "Clash",
+  "description": "Sixty-second skill tournaments. Same board for everyone, top scores split the prize pool.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#EAE8E1",
+  "theme_color": "#17150F",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "/icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

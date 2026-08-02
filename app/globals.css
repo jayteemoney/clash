@@ -1,0 +1,128 @@
+@import "tailwindcss";
+
+/**
+ * Clash design tokens.
+ *
+ * Vermilion on warm neutrals — energetic and competitive without looking like a casino.
+ * Everything is sized for a 360×640 phone first; nothing in the app needs a wider viewport.
+ *
+ * No web fonts are loaded. That is deliberate: MiniPay asks for a manifest of every external
+ * origin the app touches, and a system font stack keeps that list empty while removing a
+ * render-blocking request from the critical path.
+ */
+
+@theme {
+  --color-paper: #eae8e1;
+  --color-paper-raised: #f5f3ee;
+  --color-ink: #17150f;
+  --color-ink-soft: #4a463c;
+  --color-ink-faint: #8a8478;
+  --color-vermilion: #d23517;
+  --color-vermilion-dark: #a72910;
+  --color-vermilion-soft: #fbe7e2;
+  --color-gold: #c8901a;
+  --color-jade: #1f7a55;
+  --color-line: #d6d2c6;
+
+  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+}
+
+:root {
+  color-scheme: light;
+}
+
+html,
+body {
+  background: var(--color-paper);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  /* Nothing in a 60-second game benefits from rubber-banding. */
+  overscroll-behavior-y: none;
+}
+
+body {
+  -webkit-tap-highlight-color: transparent;
+}
+
+@layer utilities {
+  /* This is a phone app. On a desktop it sits centred at phone width rather than stretching. */
+  .app-shell {
+    width: 100%;
+    max-width: 430px;
+    margin-inline: auto;
+  }
+
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .no-select {
+    user-select: none;
+    -webkit-user-select: none;
+  }
+}
+
+button,
+a[role="button"] {
+  touch-action: manipulation;
+}
+
+@keyframes clash-pop {
+  0% {
+    transform: scale(0.86);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.04);
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes clash-rise {
+  from {
+    transform: translateY(6px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes clash-shake {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-4px);
+  }
+  75% {
+    transform: translateX(4px);
+  }
+}
+
+.animate-pop {
+  animation: clash-pop 160ms ease-out;
+}
+
+.animate-rise {
+  animation: clash-rise 200ms ease-out;
+}
+
+.animate-shake {
+  animation: clash-shake 180ms ease-in-out;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-pop,
+  .animate-rise,
+  .animate-shake {
+    animation: none;
+  }
+}
