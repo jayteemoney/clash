@@ -540,11 +540,13 @@ contract ClashArenaTest is Test {
         arena.acceptDuel(duelId);
         assertEq(usdm.balanceOf(address(arena)), 2 * stake);
 
-        (address creator, address opponent,, uint256 storedStake, ClashArena.DuelStatus status) = arena.getDuel(duelId);
+        (address creator, address opponent,, uint256 storedStake, ClashArena.DuelStatus status, uint64 acceptedAt) =
+            arena.getDuel(duelId);
         assertEq(creator, alice);
         assertEq(opponent, bob);
         assertEq(storedStake, stake);
         assertEq(uint8(status), uint8(ClashArena.DuelStatus.Accepted));
+        assertEq(acceptedAt, uint64(block.timestamp), "the acceptance clock starts here");
 
         uint256 pot = 2 * stake;
         uint256 rake = (pot * 800) / 10_000;
@@ -557,7 +559,7 @@ contract ClashArenaTest is Test {
         assertEq(usdm.balanceOf(alice), 1_000e18 - stake);
         assertEq(usdm.balanceOf(address(arena)), 0);
 
-        (,,,, ClashArena.DuelStatus finalStatus) = arena.getDuel(duelId);
+        (,,,, ClashArena.DuelStatus finalStatus,) = arena.getDuel(duelId);
         assertEq(uint8(finalStatus), uint8(ClashArena.DuelStatus.Settled));
     }
 
@@ -610,7 +612,7 @@ contract ClashArenaTest is Test {
         assertEq(usdm.balanceOf(alice), 1_000e18, "stake is returned in full");
         assertEq(usdm.balanceOf(address(arena)), 0);
 
-        (,,,, ClashArena.DuelStatus status) = arena.getDuel(duelId);
+        (,,,, ClashArena.DuelStatus status,) = arena.getDuel(duelId);
         assertEq(uint8(status), uint8(ClashArena.DuelStatus.Cancelled));
     }
 
@@ -677,6 +679,107 @@ contract ClashArenaTest is Test {
         vm.prank(settler);
         vm.expectRevert(ClashArena.DuelNotAccepted.selector);
         arena.settleDuel(duelId, alice);
+    }
+
+    // ------------------------------------------------------------------
+    // Voiding a duel neither player completed
+    // ------------------------------------------------------------------
+
+    function test_Duel_VoidRefundsBothSides() public {
+        uint256 stake = 4e18;
+
+        vm.prank(alice);
+        uint256 duelId = arena.createDuel(address(usdm), stake);
+        vm.prank(bob);
+        arena.acceptDuel(duelId);
+
+        vm.expectEmit(true, true, true, true, address(arena));
+        emit ClashArena.DuelVoided(duelId, alice, bob, stake);
+
+        vm.prank(settler);
+        arena.voidDuel(duelId);
+
+        assertEq(usdm.balanceOf(alice), 1_000e18, "creator made whole");
+        assertEq(usdm.balanceOf(bob), 1_000e18, "opponent made whole");
+        assertEq(usdm.balanceOf(treasury), 0, "no rake on a contest that never happened");
+        assertEq(usdm.balanceOf(address(arena)), 0);
+
+        (,,,, ClashArena.DuelStatus status,) = arena.getDuel(duelId);
+        assertEq(uint8(status), uint8(ClashArena.DuelStatus.Cancelled));
+    }
+
+    function test_Duel_VoidRevertsForNonSettler() public {
+        vm.prank(alice);
+        uint256 duelId = arena.createDuel(address(usdm), 1e18);
+        vm.prank(bob);
+        arena.acceptDuel(duelId);
+
+        vm.prank(alice);
+        vm.expectRevert(ClashArena.NotSettler.selector);
+        arena.voidDuel(duelId);
+    }
+
+    function test_Duel_VoidRevertsBeforeAccept() public {
+        vm.prank(alice);
+        uint256 duelId = arena.createDuel(address(usdm), 1e18);
+
+        vm.prank(settler);
+        vm.expectRevert(ClashArena.DuelNotAccepted.selector);
+        arena.voidDuel(duelId);
+    }
+
+    function test_Duel_VoidRevertsAfterSettlement() public {
+        vm.prank(alice);
+        uint256 duelId = arena.createDuel(address(usdm), 1e18);
+        vm.prank(bob);
+        arena.acceptDuel(duelId);
+
+        vm.prank(settler);
+        arena.settleDuel(duelId, alice);
+
+        vm.prank(settler);
+        vm.expectRevert(ClashArena.DuelNotAccepted.selector);
+        arena.voidDuel(duelId);
+    }
+
+    function test_Duel_VoidRevertsForUnknownDuel() public {
+        vm.prank(settler);
+        vm.expectRevert(ClashArena.UnknownDuel.selector);
+        arena.voidDuel(404);
+    }
+
+    function test_Duel_CannotSettleAfterVoid() public {
+        vm.prank(alice);
+        uint256 duelId = arena.createDuel(address(usdm), 1e18);
+        vm.prank(bob);
+        arena.acceptDuel(duelId);
+
+        vm.prank(settler);
+        arena.voidDuel(duelId);
+
+        vm.prank(settler);
+        vm.expectRevert(ClashArena.DuelNotAccepted.selector);
+        arena.settleDuel(duelId, alice);
+    }
+
+    /// @dev Every accepted duel must have exactly one terminal path out, and both drain the escrow.
+    function test_Duel_EveryAcceptedDuelCanBeResolved() public {
+        vm.prank(alice);
+        uint256 settled = arena.createDuel(address(usdm), 1e18);
+        vm.prank(bob);
+        arena.acceptDuel(settled);
+
+        vm.prank(alice);
+        uint256 voided = arena.createDuel(address(usdm), 1e18);
+        vm.prank(carol);
+        arena.acceptDuel(voided);
+
+        vm.startPrank(settler);
+        arena.settleDuel(settled, bob);
+        arena.voidDuel(voided);
+        vm.stopPrank();
+
+        assertEq(usdm.balanceOf(address(arena)), 0, "no duel escrow is ever left behind");
     }
 
     // ------------------------------------------------------------------

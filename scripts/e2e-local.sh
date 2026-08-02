@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 #
-# Full create → join → score → settle cycle against a local Anvil chain.
+# Full money path against a local Anvil chain: tournaments and both duel outcomes.
 #
 #   ./scripts/e2e-local.sh
 #
-# Proves the whole Developer A half wires together — contract, settler key, score validation,
-# ranking and payout — without spending testnet funds or waiting an hour for a real window.
+# Proves the settlement stack wires together — contract, settler key, score validation, ranking
+# and payout — without spending testnet funds or waiting an hour for a real window.
 #
 # What it does:
 #   1. Starts Anvil with Celo's chain id.
@@ -15,6 +15,11 @@
 #   4. Starts the dev server, which opens the hour's tournament on chain.
 #   5. Funds three players, enters them, submits scores through the real API.
 #   6. Warps past the close, settles, and checks the money landed where it should.
+#   7. Runs a duel both players finish, asserting the winner receives the pot less the rake.
+#   8. Runs a duel neither player finishes, asserting the hourly sweep refunds both stakes.
+#
+# Every stage asserts the arena holds zero afterwards. Escrow left behind is the failure mode that
+# matters, because it is someone's money.
 #
 # Requires: foundry (anvil, cast, forge), node, npm, curl.
 
@@ -48,20 +53,24 @@ say() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 wei_to_eth() { cast to-unit "$1" ether; }
 balance() { cast call "$USDM" 'balanceOf(address)(uint256)' "$1" --rpc-url "$RPC" | awk '{print $1}'; }
 
-say "1/7  Starting Anvil on chain 42220"
+# Shells truncate integers past 19 digits, which is exactly where 18-decimal token balances live.
+# Node's BigInt does the subtraction honestly.
+delta() { node -e 'console.log(String(BigInt(process.argv[1]) - BigInt(process.argv[2])))' "$1" "$2"; }
+
+say "1/9  Starting Anvil on chain 42220"
 anvil --chain-id 42220 --port 8545 --silent >/tmp/clash-anvil.log 2>&1 &
 ANVIL_PID=$!
 sleep 4
 cast chain-id --rpc-url "$RPC" >/dev/null
 
-say "2/7  Installing a mock USDm at the canonical address"
+say "2/9  Installing a mock USDm at the canonical address"
 MOCK=$(cd contracts && forge create test/mocks/MockERC20.sol:MockERC20 \
   --rpc-url "$RPC" --private-key "$K0" --broadcast \
   --constructor-args "Celo Dollar" "USDm" 18 2>&1 | awk '/Deployed to:/ {print $3}')
 cast rpc anvil_setCode "$USDM" "$(cast code "$MOCK" --rpc-url "$RPC")" --rpc-url "$RPC" >/dev/null
 echo "USDm decimals: $(cast call "$USDM" 'decimals()(uint8)' --rpc-url "$RPC")"
 
-say "3/7  Deploying ClashArena"
+say "3/9  Deploying ClashArena"
 ARENA=$(cd contracts && forge create src/ClashArena.sol:ClashArena \
   --rpc-url "$RPC" --private-key "$K0" --broadcast \
   --constructor-args "$TREASURY" "$A0" "$A0" 2>&1 | awk '/Deployed to:/ {print $3}')
@@ -76,7 +85,7 @@ SETTLER_PRIVATE_KEY=$K0
 CRON_SECRET=$CRON_SECRET
 EOF
 
-say "4/7  Starting the app (it opens this hour's tournament on chain)"
+say "4/9  Starting the app (it opens this hour's tournament on chain)"
 npm run dev >/tmp/clash-dev.log 2>&1 &
 DEV_PID=$!
 for _ in $(seq 1 30); do
@@ -89,7 +98,7 @@ ID=$(printf '%s' "$TOURNAMENT" | sed -n 's/.*"id":\([0-9]*\).*/\1/p')
 GAME=$(printf '%s' "$TOURNAMENT" | sed -n 's/.*"gameId":"\([a-z]*\)".*/\1/p')
 [ -n "$ID" ] || { echo "The tournament did not open — check /tmp/clash-dev.log"; exit 1; }
 
-say "5/7  Funding and entering three players"
+say "5/9  Funding and entering three players"
 for pair in "$P1:$KP1" "$P2:$KP2" "$P3:$KP3"; do
   addr=${pair%%:*}; key=${pair##*:}
   cast send "$USDM" "mint(address,uint256)" "$addr" 10000000000000000000 --rpc-url "$RPC" --private-key "$K0" >/dev/null
@@ -99,7 +108,7 @@ for pair in "$P1:$KP1" "$P2:$KP2" "$P3:$KP3"; do
 done
 echo "escrowed: $(wei_to_eth "$(balance "$ARENA")") USDm"
 
-say "6/7  Submitting scores through the API"
+say "6/9  Submitting scores through the API"
 post_score() {
   curl -s -X POST "$APP/api/score" -H 'Content-Type: application/json' \
     -d "{\"tournamentId\":$ID,\"address\":\"$1\",\"score\":$2,\"gameId\":\"$GAME\"}"
@@ -114,7 +123,7 @@ post_score 0x9965507D1a55bcC2695C58ba16FB37d819B0A4dc 50
 echo "-- an impossible score is refused --"
 post_score "$P1" 999999
 
-say "7/7  Closing the window and settling"
+say "7/9  Closing the window and settling"
 cast rpc evm_increaseTime 4000 --rpc-url "$RPC" >/dev/null
 cast rpc evm_mine --rpc-url "$RPC" >/dev/null
 curl -s -X POST "$APP/api/settle" -H 'Content-Type: application/json' \
@@ -133,4 +142,71 @@ if [ "$(balance "$ARENA")" != "0" ]; then
   exit 1
 fi
 
-say "End-to-end cycle passed."
+# ---------------------------------------------------------------------------
+# Duels. Both terminal paths, because an accepted duel holds two real stakes and
+# every one of them has to have a way out.
+# ---------------------------------------------------------------------------
+
+post_duel_score() {
+  curl -s -X POST "$APP/api/duel/score" -H 'Content-Type: application/json' \
+    -d "{\"duelId\":$1,\"address\":\"$2\",\"score\":$3,\"gameId\":\"$GAME\"}"
+  echo
+}
+
+say "8/9  Duel that both players complete"
+STAKE=500000000000000000
+cast send "$ARENA" "createDuel(address,uint256)" "$USDM" "$STAKE" --rpc-url "$RPC" --private-key "$KP1" >/dev/null
+cast send "$ARENA" "acceptDuel(uint256)" 1 --rpc-url "$RPC" --private-key "$KP2" >/dev/null
+echo "duel 1 accepted, escrow: $(wei_to_eth "$(balance "$ARENA")") USDm"
+
+P1_BEFORE=$(balance "$P1")
+P2_BEFORE=$(balance "$P2")
+
+post_duel_score 1 "$P1" 30
+post_duel_score 1 "$P2" 45
+
+WON=$(delta "$(balance "$P2")" "$P2_BEFORE")
+LOST=$(delta "$(balance "$P1")" "$P1_BEFORE")
+printf 'winner gained : %s USDm  (1.0 pot less 8%% = 0.92)\n' "$(wei_to_eth "$WON")"
+printf 'loser change  : %s USDm  (expect 0)\n' "$(wei_to_eth "$LOST")"
+
+if [ "$WON" != "920000000000000000" ]; then
+  echo "FAIL: expected the duel winner to receive 0.92 USDm, got $WON wei."
+  exit 1
+fi
+
+if [ "$(balance "$ARENA")" != "0" ]; then
+  echo "FAIL: duel escrow was not released."
+  exit 1
+fi
+
+say "9/9  Duel that neither player completes"
+P1_BEFORE=$(balance "$P1")
+P3_BEFORE=$(balance "$P3")
+
+cast send "$ARENA" "createDuel(address,uint256)" "$USDM" "$STAKE" --rpc-url "$RPC" --private-key "$KP1" >/dev/null
+cast send "$ARENA" "acceptDuel(uint256)" 2 --rpc-url "$RPC" --private-key "$KP3" >/dev/null
+echo "duel 2 accepted, escrow: $(wei_to_eth "$(balance "$ARENA")") USDm — no scores submitted"
+
+cast rpc evm_increaseTime 4000 --rpc-url "$RPC" >/dev/null
+cast rpc evm_mine --rpc-url "$RPC" >/dev/null
+echo "-- past the deadline; running the hourly sweep --"
+curl -s "$APP/api/cron/settle" -H "Authorization: Bearer $CRON_SECRET" | head -c 400
+echo
+
+CREATOR_DELTA=$(delta "$(balance "$P1")" "$P1_BEFORE")
+OPPONENT_DELTA=$(delta "$(balance "$P3")" "$P3_BEFORE")
+printf 'creator change : %s USDm  (expect 0, fully refunded)\n' "$(wei_to_eth "$CREATOR_DELTA")"
+printf 'opponent change: %s USDm  (expect 0, fully refunded)\n' "$(wei_to_eth "$OPPONENT_DELTA")"
+printf 'treasury rake  : %s USDm  (unchanged — no contest, no cut)\n' "$(wei_to_eth "$(balance "$TREASURY")")"
+
+if [ "$CREATOR_DELTA" != "0" ] || [ "$OPPONENT_DELTA" != "0" ]; then
+  echo "FAIL: an abandoned duel did not refund both stakes in full."
+  exit 1
+fi
+if [ "$(balance "$ARENA")" != "0" ]; then
+  echo "FAIL: an abandoned duel left funds stranded in the contract."
+  exit 1
+fi
+
+say "End-to-end cycle passed: tournaments and both duel outcomes."

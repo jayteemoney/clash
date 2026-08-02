@@ -111,6 +111,11 @@ export async function settleDuel(duelId: bigint, winner: `0x${string}`): Promise
   return writeAndWait("settleDuel", [duelId, winner]);
 }
 
+/** Refunds both sides of an accepted duel neither player completed. */
+export async function voidDuel(duelId: bigint): Promise<`0x${string}`> {
+  return writeAndWait("voidDuel", [duelId]);
+}
+
 /** Shared secret guard for the operator-only routes. Vercel Cron sends it as a bearer token. */
 export function authorizeOperator(request: Request): boolean {
   const secret = process.env.CRON_SECRET;

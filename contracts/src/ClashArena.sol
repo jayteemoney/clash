@@ -59,6 +59,10 @@ contract ClashArena is Ownable, ReentrancyGuard {
         address entryToken;
         uint256 stake;
         DuelStatus status;
+        /// @dev When the opponent accepted. Starts the clock the settler measures the duel
+        ///      deadline against — without it there is no on-chain way to tell a duel still in
+        ///      play from one both players abandoned.
+        uint64 acceptedAt;
     }
 
     // ---------------------------------------------------------------------
@@ -111,9 +115,10 @@ contract ClashArena is Ownable, ReentrancyGuard {
     event FeeCollected(address indexed entryToken, uint256 rake);
 
     event DuelCreated(uint256 indexed duelId, address indexed creator, address indexed entryToken, uint256 stake);
-    event DuelAccepted(uint256 indexed duelId, address indexed opponent);
+    event DuelAccepted(uint256 indexed duelId, address indexed opponent, uint64 acceptedAt);
     event DuelCancelled(uint256 indexed duelId);
     event DuelSettled(uint256 indexed duelId, address indexed winner, uint256 amount, uint256 rake);
+    event DuelVoided(uint256 indexed duelId, address indexed creator, address indexed opponent, uint256 stake);
 
     event TreasuryUpdated(address indexed treasury);
     event SettlerUpdated(address indexed settler);
@@ -314,7 +319,12 @@ contract ClashArena is Ownable, ReentrancyGuard {
 
         duelId = nextDuelId++;
         _duels[duelId] = Duel({
-            creator: msg.sender, opponent: address(0), entryToken: entryToken, stake: stake, status: DuelStatus.Open
+            creator: msg.sender,
+            opponent: address(0),
+            entryToken: entryToken,
+            stake: stake,
+            status: DuelStatus.Open,
+            acceptedAt: 0
         });
 
         IERC20(entryToken).safeTransferFrom(msg.sender, address(this), stake);
@@ -331,10 +341,12 @@ contract ClashArena is Ownable, ReentrancyGuard {
 
         d.opponent = msg.sender;
         d.status = DuelStatus.Accepted;
+        // forge-lint: disable-next-line(unsafe-typecast)
+        d.acceptedAt = uint64(block.timestamp);
 
         IERC20(d.entryToken).safeTransferFrom(msg.sender, address(this), d.stake);
 
-        emit DuelAccepted(duelId, msg.sender);
+        emit DuelAccepted(duelId, msg.sender, d.acceptedAt);
     }
 
     /// @notice Withdraw an unaccepted duel and refund the creator.
@@ -373,6 +385,24 @@ contract ClashArena is Ownable, ReentrancyGuard {
         IERC20(token).safeTransfer(winner, payout);
 
         emit DuelSettled(duelId, winner, payout, rake);
+    }
+
+    /// @notice Refund both sides of an accepted duel that neither player completed.
+    /// @dev The counterpart to {settleDuel}: that function must name a winner, so on its own it
+    ///      cannot resolve a duel where nobody played. Without this the two stakes would sit in the
+    ///      contract permanently, since {cancelDuel} only applies while a duel is still Open.
+    ///      No rake is taken — there was no contest to take a cut of.
+    function voidDuel(uint256 duelId) external onlySettler nonReentrant {
+        Duel storage d = _duels[duelId];
+        if (d.status == DuelStatus.None) revert UnknownDuel();
+        if (d.status != DuelStatus.Accepted) revert DuelNotAccepted();
+
+        d.status = DuelStatus.Cancelled;
+
+        IERC20(d.entryToken).safeTransfer(d.creator, d.stake);
+        IERC20(d.entryToken).safeTransfer(d.opponent, d.stake);
+
+        emit DuelVoided(duelId, d.creator, d.opponent, d.stake);
     }
 
     // ---------------------------------------------------------------------
@@ -429,9 +459,16 @@ contract ClashArena is Ownable, ReentrancyGuard {
     function getDuel(uint256 duelId)
         external
         view
-        returns (address creator, address opponent, address entryToken, uint256 stake, DuelStatus status)
+        returns (
+            address creator,
+            address opponent,
+            address entryToken,
+            uint256 stake,
+            DuelStatus status,
+            uint64 acceptedAt
+        )
     {
         Duel storage d = _duels[duelId];
-        return (d.creator, d.opponent, d.entryToken, d.stake, d.status);
+        return (d.creator, d.opponent, d.entryToken, d.stake, d.status, d.acceptedAt);
     }
 }

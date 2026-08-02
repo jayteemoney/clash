@@ -168,6 +168,11 @@ export const clashArenaAbi = [
         "name": "status",
         "type": "uint8",
         "internalType": "enum ClashArena.DuelStatus"
+      },
+      {
+        "name": "acceptedAt",
+        "type": "uint64",
+        "internalType": "uint64"
       }
     ],
     "stateMutability": "view"
@@ -494,6 +499,19 @@ export const clashArenaAbi = [
     "stateMutability": "view"
   },
   {
+    "type": "function",
+    "name": "voidDuel",
+    "inputs": [
+      {
+        "name": "duelId",
+        "type": "uint256",
+        "internalType": "uint256"
+      }
+    ],
+    "outputs": [],
+    "stateMutability": "nonpayable"
+  },
+  {
     "type": "event",
     "name": "DuelAccepted",
     "inputs": [
@@ -508,6 +526,12 @@ export const clashArenaAbi = [
         "type": "address",
         "indexed": true,
         "internalType": "address"
+      },
+      {
+        "name": "acceptedAt",
+        "type": "uint64",
+        "indexed": false,
+        "internalType": "uint64"
       }
     ],
     "anonymous": false
@@ -580,6 +604,37 @@ export const clashArenaAbi = [
       },
       {
         "name": "rake",
+        "type": "uint256",
+        "indexed": false,
+        "internalType": "uint256"
+      }
+    ],
+    "anonymous": false
+  },
+  {
+    "type": "event",
+    "name": "DuelVoided",
+    "inputs": [
+      {
+        "name": "duelId",
+        "type": "uint256",
+        "indexed": true,
+        "internalType": "uint256"
+      },
+      {
+        "name": "creator",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "opponent",
+        "type": "address",
+        "indexed": true,
+        "internalType": "address"
+      },
+      {
+        "name": "stake",
         "type": "uint256",
         "indexed": false,
         "internalType": "uint256"

@@ -4,6 +4,7 @@ import { ENTRY_AMOUNT } from "@/lib/config";
 import { HOUR_SECONDS, currentWindow } from "@/lib/tournament";
 import { authorizeOperator, ensureTournament, settlerConfigured, tournamentIdForStart } from "@/lib/server/settler";
 import { settleOne, type SettleOutcome } from "@/lib/server/settleFlow";
+import { resolveOpenDuels } from "@/lib/server/duelFlow";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -54,7 +55,17 @@ export async function GET(request: Request) {
     opened = { error: error instanceof Error ? error.message : "open-failed" };
   }
 
+  // Duels normally settle the instant both players submit, so this sweep exists for the ones where
+  // somebody walked away: past the deadline it awards the player who showed up, or refunds both if
+  // neither did. Without it an accepted duel could hold two stakes indefinitely.
+  let duels;
+  try {
+    duels = await resolveOpenDuels();
+  } catch (error) {
+    duels = { error: error instanceof Error ? error.message : "duel-sweep-failed" };
+  }
+
   // Always 200: a non-2xx makes Vercel retry, and a retry cannot fix a reverted settle. The body
   // carries the real status for the operator dashboard and alerting.
-  return NextResponse.json({ ranAt: new Date().toISOString(), closed, opened });
+  return NextResponse.json({ ranAt: new Date().toISOString(), closed, opened, duels });
 }

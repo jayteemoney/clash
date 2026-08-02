@@ -235,16 +235,36 @@ export interface DuelOnChain {
   stake: bigint;
   /** 0 None · 1 Open · 2 Accepted · 3 Settled · 4 Cancelled */
   status: number;
+  /** Unix seconds the opponent accepted at, or 0 while still open. */
+  acceptedAt: number;
 }
 
 export async function readDuel(duelId: bigint): Promise<DuelOnChain> {
-  const [creator, opponent, entryToken, stake, status] = await publicClient().readContract({
+  const [creator, opponent, entryToken, stake, status, acceptedAt] = await publicClient().readContract({
     address: requireClashAddress(),
     abi: clashArenaAbi,
     functionName: "getDuel",
     args: [duelId],
   });
-  return { creator, opponent, entryToken, stake, status: Number(status) };
+  return { creator, opponent, entryToken, stake, status: Number(status), acceptedAt: Number(acceptedAt) };
+}
+
+export async function readNextDuelId(): Promise<bigint> {
+  return publicClient().readContract({
+    address: requireClashAddress(),
+    abi: clashArenaAbi,
+    functionName: "nextDuelId",
+  });
 }
 
 export const DUEL_STATUS = ["None", "Open", "Accepted", "Settled", "Cancelled"] as const;
+
+export const DUEL_STATUS_ACCEPTED = 2;
+
+/**
+ * How long both players have to complete a duel once it is accepted.
+ *
+ * One hour matches the tournament rhythm and is far longer than the 60 seconds a round actually
+ * takes, so the deadline only ever catches genuine abandonment.
+ */
+export const DUEL_DEADLINE_SECONDS = 3600;
