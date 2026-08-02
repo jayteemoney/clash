@@ -55,3 +55,6 @@ contracts/lib/
 
 # The example env file must be committed; the `.env*` rule above would otherwise exclude it.
 !.env.example
+
+# Skills lockfile (the skills themselves live in the gitignored .agents/)
+skills-lock.json
