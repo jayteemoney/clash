@@ -1,0 +1,449 @@
+"use client";
+
+import { useCallback, useEffect, useState } from "react";
+import Link from "next/link";
+import { formatUnits, parseUnits } from "viem";
+import { AppHeader } from "./AppHeader";
+import { Leaderboard } from "./Leaderboard";
+import { GamePlayer } from "./games/GamePlayer";
+import { Button, Card, Pill, Spinner, Stat } from "./ui";
+import { useMiniPay } from "@/hooks/useMiniPay";
+import { acceptDuel, cancelDuel, createDuel, readDuel, type DuelOnChain } from "@/lib/clash";
+import { DEFAULT_TOKEN } from "@/lib/tokens";
+import { canAfford } from "@/lib/stablecoins";
+import { DEEPLINKS, goDeposit } from "@/lib/minipay";
+import { DUEL_STAKES, PLAYER_SHARE_PCT } from "@/lib/config";
+import { CLASH_ADDRESS, explorerTxUrl } from "@/lib/contracts";
+import { GAME_META } from "@/lib/games";
+import { duelSeed } from "@/lib/rng";
+import { currentWindow, gameForWindow } from "@/lib/tournament";
+import { aliasFor } from "@/lib/identity";
+
+/**
+ * 1v1 duels. Both sides stake the same amount, both play the board seeded from the duel id, and
+ * the winner takes the pot less the same rake the tournaments charge.
+ *
+ * The invite is just a link carrying `?duel=<id>`. Sharing goes through MiniPay's invite deeplink,
+ * which is the highest-intent surface a player has for pulling a friend in.
+ */
+export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) {
+  const wallet = useMiniPay();
+
+  const [duelId, setDuelId] = useState<number | null>(initialDuelId);
+  const [duel, setDuel] = useState<DuelOnChain | null>(null);
+  const [stake, setStake] = useState<string>(DUEL_STAKES[0]);
+  const [busy, setBusy] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [lastTx, setLastTx] = useState<string | null>(null);
+  const [playing, setPlaying] = useState(false);
+  const [score, setScore] = useState<number | null>(null);
+  const [result, setResult] = useState<DuelResult | null>(null);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Duels run whatever game the arena is running this hour, so a duel and a tournament never ask
+  // a player to learn two things at once.
+  const gameId = gameForWindow(currentWindow().start);
+  const meta = GAME_META[gameId];
+
+  const load = useCallback(async () => {
+    if (!duelId || !CLASH_ADDRESS) return;
+    try {
+      setDuel(await readDuel(BigInt(duelId)));
+    } catch {
+      setNotice("That duel could not be found.");
+    }
+  }, [duelId]);
+
+  useEffect(() => {
+    if (!duelId || !CLASH_ADDRESS) return;
+    let cancelled = false;
+
+    const read = async () => {
+      try {
+        const found = await readDuel(BigInt(duelId));
+        if (!cancelled) setDuel(found);
+      } catch {
+        if (!cancelled) setNotice("That duel could not be found.");
+      }
+    };
+
+    void read();
+    return () => {
+      cancelled = true;
+    };
+  }, [duelId]);
+
+  const create = async () => {
+    if (!wallet.address) return;
+    setNotice(null);
+
+    const amount = parseUnits(stake, DEFAULT_TOKEN.decimals);
+    if (wallet.needsDeposit || !canAfford(wallet.balances, DEFAULT_TOKEN, amount)) {
+      goDeposit();
+      return;
+    }
+
+    setBusy("Creating…");
+    try {
+      const { steps, duelId: created } = await createDuel(wallet.address, DEFAULT_TOKEN, amount);
+      setLastTx(steps[steps.length - 1].hash);
+      await wallet.refresh();
+
+      if (created !== null) {
+        setDuelId(Number(created));
+        setNotice(null);
+      } else {
+        setNotice("Duel created, but the invite link could not be read. Refresh and check your duels.");
+      }
+    } catch (error) {
+      setNotice(readableError(error));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const accept = async () => {
+    if (!wallet.address || !duel || !duelId) return;
+    setNotice(null);
+
+    if (wallet.needsDeposit || !canAfford(wallet.balances, DEFAULT_TOKEN, duel.stake)) {
+      goDeposit();
+      return;
+    }
+
+    setBusy("Accepting…");
+    try {
+      const steps = await acceptDuel(wallet.address, BigInt(duelId), DEFAULT_TOKEN, duel.stake);
+      setLastTx(steps[steps.length - 1].hash);
+      await Promise.all([load(), wallet.refresh()]);
+    } catch (error) {
+      setNotice(readableError(error));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const withdraw = async () => {
+    if (!wallet.address || !duelId) return;
+    setBusy("Withdrawing…");
+    try {
+      const step = await cancelDuel(wallet.address, BigInt(duelId), DEFAULT_TOKEN);
+      setLastTx(step.hash);
+      await Promise.all([load(), wallet.refresh()]);
+    } catch (error) {
+      setNotice(readableError(error));
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  /**
+   * Sends the round's score to the settler. The duel resolves the moment the second player's score
+   * lands, so the response can already carry the outcome.
+   */
+  const submitScore = async (value: number) => {
+    setScore(value);
+    setPlaying(false);
+
+    if (!duelId || !wallet.address) return;
+
+    setSubmitting(true);
+    try {
+      const response = await fetch("/api/duel/score", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ duelId, address: wallet.address, score: value, gameId }),
+      });
+      const body = (await response.json()) as DuelResult & { error?: string };
+
+      if (!response.ok) {
+        setNotice(body.error ?? "Your score could not be recorded.");
+        return;
+      }
+
+      setResult(body);
+      await Promise.all([load(), wallet.refresh()]);
+    } catch {
+      setNotice("Your score could not be sent. Check your connection and try again.");
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  if (playing) {
+    return (
+      <main className="pb-6">
+        <AppHeader wallet={wallet} />
+        <GamePlayer gameId={gameId} seed={duelSeed(duelId ?? 0, gameId)} onFinish={submitScore} />
+      </main>
+    );
+  }
+
+  const shareUrl =
+    typeof window !== "undefined" && duelId ? `${window.location.origin}/duel?duel=${duelId}` : "";
+
+  return (
+    <main className="flex flex-col gap-4 px-4 pb-6">
+      <AppHeader wallet={wallet} />
+
+      <div className="flex items-center justify-between">
+        <h1 className="text-xl font-extrabold">Duels</h1>
+        <Link href="/" className="text-ink-faint text-sm underline underline-offset-2">
+          Back to the arena
+        </Link>
+      </div>
+
+      <Card className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <span className="bg-ink text-paper flex h-8 w-8 items-center justify-center rounded-lg text-xs font-extrabold">
+            {meta.emoji}
+          </span>
+          <div>
+            <p className="text-sm font-bold">Tonight&rsquo;s duel game: {meta.name}</p>
+            <p className="text-ink-faint text-xs">Both players get the same board. Highest score wins the pot.</p>
+          </div>
+        </div>
+        <p className="text-ink-faint text-xs">
+          Winner takes {PLAYER_SHARE_PCT}% of the combined stake. The rest runs the arena.
+        </p>
+      </Card>
+
+      {notice ? (
+        <div className="border-vermilion bg-vermilion-soft text-vermilion-dark rounded-2xl border px-3 py-2 text-sm font-semibold">
+          {notice}
+        </div>
+      ) : null}
+
+      {score !== null ? (
+        <Card className="flex flex-col items-center gap-1 py-6 text-center">
+          <span className="text-ink-faint text-[11px] font-semibold tracking-wide uppercase">Your duel score</span>
+          <span className="tabular text-4xl font-extrabold">{score}</span>
+          {submitting ? (
+            <Spinner label="Sending your score…" />
+          ) : (
+            <DuelResultLine result={result} you={wallet.address} />
+          )}
+        </Card>
+      ) : null}
+
+      {duelId && duel ? (
+        <Card className="flex flex-col gap-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-extrabold tracking-wide uppercase">Duel #{duelId}</h2>
+            <Pill tone={duel.status === 2 ? "good" : duel.status === 1 ? "hot" : "neutral"}>
+              {["Not found", "Waiting for an opponent", "In play", "Paid out", "Withdrawn"][duel.status]}
+            </Pill>
+          </div>
+
+          <div className="grid grid-cols-2 gap-2">
+            <Stat
+              label="Stake each"
+              value={formatUnits(duel.stake, DEFAULT_TOKEN.decimals)}
+              hint={DEFAULT_TOKEN.symbol}
+            />
+            <Stat
+              label="Pot"
+              value={formatUnits(duel.stake * 2n, DEFAULT_TOKEN.decimals)}
+              hint={DEFAULT_TOKEN.symbol}
+            />
+          </div>
+
+          <div className="text-ink-soft flex flex-col gap-1 text-xs">
+            <span>
+              Challenger: <strong>{aliasFor(duel.creator)}</strong>
+            </span>
+            {duel.status >= 2 ? (
+              <span>
+                Opponent: <strong>{aliasFor(duel.opponent)}</strong>
+              </span>
+            ) : null}
+          </div>
+
+          {duel.status === 1 && wallet.address?.toLowerCase() !== duel.creator.toLowerCase() ? (
+            <Button onClick={accept} disabled={Boolean(busy)}>
+              {busy ?? `Accept for ${formatUnits(duel.stake, DEFAULT_TOKEN.decimals)} ${DEFAULT_TOKEN.symbol}`}
+            </Button>
+          ) : null}
+
+          {duel.status === 1 && wallet.address?.toLowerCase() === duel.creator.toLowerCase() ? (
+            <>
+              <ShareRow url={shareUrl} />
+              <Button variant="ghost" onClick={withdraw} disabled={Boolean(busy)}>
+                {busy ?? "Withdraw and get your stake back"}
+              </Button>
+            </>
+          ) : null}
+
+          {duel.status === 2 ? (
+            <Button onClick={() => setPlaying(true)} disabled={score !== null}>
+              {score !== null ? "Round played" : "Play your round"}
+            </Button>
+          ) : null}
+        </Card>
+      ) : null}
+
+      {!duelId ? (
+        <Card className="flex flex-col gap-3">
+          <h2 className="text-sm font-extrabold tracking-wide uppercase">Start a duel</h2>
+
+          <div className="grid grid-cols-3 gap-2">
+            {DUEL_STAKES.map((option) => (
+              <button
+                key={option}
+                type="button"
+                onClick={() => setStake(option)}
+                className={`tabular min-h-[52px] rounded-2xl border text-base font-bold transition-colors ${
+                  stake === option
+                    ? "border-vermilion bg-vermilion text-white"
+                    : "border-line bg-paper-raised text-ink"
+                }`}
+              >
+                {option}
+              </button>
+            ))}
+          </div>
+
+          {wallet.address ? (
+            <Button onClick={create} disabled={Boolean(busy)}>
+              {busy ?? `Stake ${stake} ${DEFAULT_TOKEN.symbol}`}
+            </Button>
+          ) : (
+            <p className="text-ink-faint text-xs">Open Clash in MiniPay to create a duel.</p>
+          )}
+
+          <p className="text-ink-faint text-xs leading-relaxed">
+            Your stake is held until the duel is settled. If nobody accepts, withdraw it and it comes
+            straight back.
+          </p>
+        </Card>
+      ) : (
+        <button
+          type="button"
+          onClick={() => {
+            setDuelId(null);
+            setDuel(null);
+            setScore(null);
+          }}
+          className="text-ink-faint text-xs underline underline-offset-2"
+        >
+          Start a different duel
+        </button>
+      )}
+
+      {lastTx ? (
+        <a
+          href={explorerTxUrl(lastTx)}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="text-ink-faint text-xs underline underline-offset-2"
+        >
+          View the last transaction on the block explorer
+        </a>
+      ) : null}
+
+      {duelId ? (
+        <section>
+          <h2 className="mb-2 text-sm font-extrabold tracking-wide uppercase">This hour&rsquo;s arena</h2>
+          <Leaderboard tournamentId={null} />
+        </section>
+      ) : null}
+
+      {wallet.loading ? <Spinner label="Checking your wallet…" /> : null}
+    </main>
+  );
+}
+
+interface DuelResult {
+  submitted: number;
+  opponentPlayed: boolean;
+  outcome: { status: string; winner?: string; txHash?: string } | null;
+  scores: { alias: string; score: number }[];
+}
+
+/**
+ * What the player is told after a round. The wording tracks the actual state rather than promising
+ * a payout that may not have happened yet: a duel only resolves once both scores are in, or once
+ * the deadline passes and the hourly sweep picks it up.
+ */
+function DuelResultLine({ result, you }: { result: DuelResult | null; you: `0x${string}` | null }) {
+  if (!result) {
+    return <span className="text-ink-faint text-xs">Score recorded.</span>;
+  }
+
+  if (!result.opponentPlayed) {
+    return (
+      <span className="text-ink-faint text-xs">
+        Waiting for your opponent. They have an hour from accepting; if they never play, the pot is
+        yours automatically.
+      </span>
+    );
+  }
+
+  const outcome = result.outcome;
+
+  if (outcome?.status === "settled") {
+    const won = you && outcome.winner?.toLowerCase() === you.toLowerCase();
+    return (
+      <div className="flex flex-col items-center gap-1">
+        <span className={`text-sm font-bold ${won ? "text-jade" : "text-ink-soft"}`}>
+          {won ? "You won the duel." : "Your opponent took this one."}
+        </span>
+        {outcome.txHash ? (
+          <a href={DEEPLINKS.receipt(outcome.txHash)} className="text-vermilion text-xs font-semibold underline">
+            View the payout receipt
+          </a>
+        ) : null}
+      </div>
+    );
+  }
+
+  if (outcome?.status === "voided") {
+    return <span className="text-ink-faint text-xs">Nobody completed this duel. Both stakes were returned.</span>;
+  }
+
+  return (
+    <span className="text-ink-faint text-xs">
+      Both scores are in. The payout settles in a moment — check back shortly.
+    </span>
+  );
+}
+
+function ShareRow({ url }: { url: string }) {
+  const [copied, setCopied] = useState(false);
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(url);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 1500);
+    } catch {
+      setCopied(false);
+    }
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="border-line bg-paper flex items-center gap-2 rounded-xl border px-3 py-2">
+        <span className="text-ink-faint flex-1 truncate text-xs">{url}</span>
+        <button type="button" onClick={copy} className="text-vermilion text-xs font-bold">
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
+      <a
+        href={DEEPLINKS.inviteFriends}
+        className="border-line bg-paper-raised flex min-h-[48px] items-center justify-center rounded-xl border text-sm font-semibold"
+      >
+        Invite a friend
+      </a>
+    </div>
+  );
+}
+
+function readableError(error: unknown): string {
+  const message = error instanceof Error ? error.message : String(error);
+  if (/user rejected|denied/i.test(message)) return "You cancelled the transaction.";
+  if (/insufficient/i.test(message)) return "Not enough balance to cover the stake and network fee.";
+  if (/CannotDuelSelf/i.test(message)) return "You cannot accept your own duel.";
+  if (/DuelNotOpen/i.test(message)) return "Someone already took this duel.";
+  return "That did not go through. Please try again.";
+}
