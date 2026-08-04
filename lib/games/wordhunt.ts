@@ -25,6 +25,22 @@ const DICE = [
   "HLNNRZ",
 ] as const;
 
+/**
+ * Inputs to the plausibility ceiling. Kept together and named so the numbers can be re-derived
+ * rather than re-guessed — see {@link wordHunt.maxPlausibleScore} for how they were measured.
+ */
+/** More words than anyone taps in 60 seconds; the ceiling scales with this slice of the board. */
+const CEILING_WORD_COUNT = 30;
+/** Multiplier on top, so an exceptional run is never called impossible. */
+const CEILING_HEADROOM = 1.2;
+/**
+ * Absolute floor. A sparse grid can be worth under 50 points in total, so on those boards the
+ * floor sits above a full clear and stops constraining — unavoidable, given the floor also has to
+ * clear the legitimate 88 that the old ceiling rejected. Nothing is lost: an unconstrained sparse
+ * board is still only ever ranked against other players on that same board.
+ */
+const CEILING_FLOOR = 100;
+
 /** Points per word length — longer finds are worth disproportionately more. */
 export function wordScore(word: string): number {
   const n = word.length;
@@ -148,12 +164,27 @@ export const wordHunt: GameModule<WordHuntRound> = {
   durationMs: ROUND_DURATION_MS,
   buildRound: buildWordHuntRound,
   /**
-   * The theoretical maximum is every word on the board, which nobody types in 60 seconds. Cap at
-   * a quarter of the board's total value, floored at a level a strong player can actually reach,
-   * so the ceiling scales with how rich the grid is without being trivially clearable.
+   * The theoretical maximum is every word on the board, which nobody types in 60 seconds — so the
+   * ceiling has to sit above real play but below a full board clear.
+   *
+   * Derived from the board rather than guessed. Measured over 300 seeded grids, the value of the
+   * best 30 words — more than anyone taps in 60 seconds — reaches 124 on the richest boards, while
+   * a quarter of the board's total value is below 80 on 293 of those 300 grids. The previous
+   * `max(80, total/4)` was therefore a flat 80 in practice, and rejected a legitimate 88 in
+   * testing (see TEAM_SPLIT.md → known issues).
+   *
+   * So: take the value of the best {@link CEILING_WORD_COUNT} words on this specific grid, which
+   * scales with how rich the board is, and apply {@link CEILING_HEADROOM} on top. Being generous
+   * costs little — the contract already refuses to pay anyone who never entered, and a score is
+   * only ever compared against other players on the same board.
    */
   maxPlausibleScore: (round) => {
-    const total = round.solutions.reduce((sum, w) => sum + wordScore(w), 0);
-    return Math.max(80, Math.ceil(total / 4));
+    const best = round.solutions
+      .map(wordScore)
+      .sort((a, b) => b - a)
+      .slice(0, CEILING_WORD_COUNT)
+      .reduce((sum, v) => sum + v, 0);
+
+    return Math.max(CEILING_FLOOR, Math.ceil(best * CEILING_HEADROOM));
   },
 };

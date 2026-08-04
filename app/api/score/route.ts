@@ -35,7 +35,7 @@ const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
  * limitation documented in the README, and the reason commit-reveal is the next step.
  */
 export async function POST(request: Request) {
-  const limit = rateLimit(clientKey(request, "score"), 20, 60_000);
+  const limit = await rateLimit(clientKey(request, "score"), 20, 60_000);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many submissions. Please wait a moment." },

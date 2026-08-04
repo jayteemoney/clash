@@ -26,6 +26,23 @@ export function gameForWindow(startSeconds: number): GameId {
   return GAME_IDS[hourIndex % GAME_IDS.length];
 }
 
+/**
+ * Which game a duel runs, pinned to the hour it was accepted in.
+ *
+ * A duel must NOT use {@link gameForWindow} against the current hour. Duels have an hour-long
+ * deadline that starts whenever the opponent accepts, so a duel accepted at 12:45 is still live at
+ * 13:05 — by which point the hourly rotation has moved on. Deriving from "now" meant the two
+ * players could be dealt different games, and a player finishing after the boundary had a
+ * perfectly valid score rejected as "not the game running right now" while their stake sat in
+ * escrow.
+ *
+ * `acceptedAt` is on chain (see ClashArena.Duel), so client and server both derive the same answer
+ * from the same source for the whole life of the duel.
+ */
+export function gameForDuel(acceptedAtSeconds: number): GameId {
+  return gameForWindow(hourStart(acceptedAtSeconds));
+}
+
 /** Prize split for the top finishers, as weights passed to `settle`. */
 export const PAYOUT_WEIGHTS = [50, 30, 20];
 

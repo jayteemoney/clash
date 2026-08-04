@@ -262,6 +262,18 @@ export const DUEL_STATUS = ["None", "Open", "Accepted", "Settled", "Cancelled"] 
 export const DUEL_STATUS_ACCEPTED = 2;
 
 /**
+ * Terminal duel states — the money has moved and nothing can change them again. Distinct from
+ * `Open`, which is idle but still live: the settler's sweep uses that difference to decide how far
+ * back through the duel history it still has to look.
+ */
+export const DUEL_STATUS_SETTLED = 3;
+export const DUEL_STATUS_CANCELLED = 4;
+
+export function isDuelFinished(status: number): boolean {
+  return status === DUEL_STATUS_SETTLED || status === DUEL_STATUS_CANCELLED;
+}
+
+/**
  * How long both players have to complete a duel once it is accepted.
  *
  * One hour matches the tournament rhythm and is far longer than the 60 seconds a round actually

@@ -44,7 +44,11 @@ next-env.d.ts
 contracts/out/
 contracts/cache/
 contracts/broadcast/
-contracts/lib/
+contracts/foundry.lock
+# contracts/lib/ is NOT ignored: forge-std and openzeppelin-contracts are git submodules pinned
+# to release tags. Ignoring them left the contracts unbuildable from a fresh clone, since nothing
+# else recorded which versions to fetch. Clone with `git clone --recurse-submodules`, or run
+# `git submodule update --init --recursive` in an existing checkout.
 
 # TypeScript incremental build info
 *.tsbuildinfo

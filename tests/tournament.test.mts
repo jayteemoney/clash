@@ -6,11 +6,13 @@ import {
   computePayouts,
   currentWindow,
   formatCountdown,
+  gameForDuel,
   gameForWindow,
   hourStart,
   secondsRemaining,
 } from "../lib/tournament";
 import { GAME_IDS } from "../lib/games/types";
+import { DUEL_DEADLINE_SECONDS } from "../lib/clash";
 
 // ---------------------------------------------------------------------------
 // Scheduling
@@ -37,6 +39,39 @@ test("the game rotates every hour and covers all three", () => {
 test("the game for an hour is stable", () => {
   const start = hourStart(1_800_001_234);
   assert.equal(gameForWindow(start), gameForWindow(start));
+});
+
+// ---------------------------------------------------------------------------
+// Duel game pinning
+//
+// Regression: duels have an hour-long deadline that starts at acceptance, so a duel accepted
+// mid-hour is still live after the hourly rotation moves on. Deriving the game from "now" meant a
+// player finishing after the boundary had a valid score rejected while their stake sat in escrow.
+// ---------------------------------------------------------------------------
+
+test("a duel keeps its game for its whole deadline, across the hour boundary", () => {
+  // Accepted 15 minutes before the top of the hour; the deadline runs 45 minutes past it.
+  const acceptedAt = 1_800_000_000 + HOUR_SECONDS - 900;
+  const pinned = gameForDuel(acceptedAt);
+
+  for (let offset = 0; offset <= DUEL_DEADLINE_SECONDS; offset += 60) {
+    assert.equal(gameForDuel(acceptedAt), pinned, `drifted ${offset}s after acceptance`);
+  }
+
+  // The hour did roll over during that window, and the rotation did move on...
+  const laterHour = hourStart(acceptedAt + DUEL_DEADLINE_SECONDS);
+  assert.notEqual(hourStart(acceptedAt), laterHour, "the test must actually cross a boundary");
+  assert.notEqual(gameForWindow(laterHour), pinned, "the rotation must actually differ");
+  // ...but the duel's game is unchanged, which is the whole point.
+});
+
+test("a duel's game matches the hour it was accepted in", () => {
+  const start = 1_800_000_000;
+  for (let i = 0; i < 6; i++) {
+    const hour = start + i * HOUR_SECONDS;
+    assert.equal(gameForDuel(hour + 30), gameForWindow(hour), `hour ${i}`);
+    assert.equal(gameForDuel(hour + HOUR_SECONDS - 1), gameForWindow(hour), `hour ${i} end`);
+  }
 });
 
 test("secondsRemaining never goes negative", () => {

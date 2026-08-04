@@ -16,10 +16,14 @@ also challenge each other to 1v1 **duels** on the same rails.
 ## Quickstart
 
 ```bash
+git clone --recurse-submodules <repo>   # the contracts' Foundry deps are submodules
 npm install
 cp .env.example .env.local        # practice mode works with no configuration at all
 npm run dev                       # http://localhost:3000
 ```
+
+Already cloned without `--recurse-submodules`? `git submodule update --init --recursive`. Without
+it `forge build` cannot resolve OpenZeppelin or forge-std.
 
 With no contract address configured the app runs **practice-only**: all three games are fully
 playable, nothing touches the chain. Add `NEXT_PUBLIC_CLASH_ADDRESS` and `SETTLER_PRIVATE_KEY` to
@@ -42,10 +46,10 @@ through the real API, closes the window and settles — then asserts the pot is 
 |---|---|
 | `npm run dev` | Development server |
 | `npm run build` | Production build |
-| `npm test` | Determinism, scheduling, payout and identity tests (56) |
+| `npm test` | Determinism, scheduling, payout and identity tests (60) |
 | `npm run check` | Typecheck + lint + MiniPay rule lint + tests |
 | `npm run check:bundle` | Enforce the JS bundle budget (needs a build first) |
-| `npm run contracts:test` | Foundry test suite (56) |
+| `npm run contracts:test` | Foundry test suite (63) |
 | `npm run sync:abi` | Regenerate `lib/abi/clashArena.ts` from the Foundry artifacts |
 | `npm run wordlist` | Regenerate the Word Hunt dictionary |
 | `./scripts/e2e-local.sh` | Full create → join → score → settle cycle on Anvil |
@@ -107,7 +111,7 @@ a static check can catch.
 | **`feeCurrency` on every transaction** | `lib/clash.ts` → `send()`; the lint fails a file that transacts without it |
 | **USDC/USDT `feeCurrency` must be the adapter** | `lib/tokens.ts`, asserted by the rule lint against the known adapter addresses |
 | Zero balance → **Deposit deeplink**, never an error | `lib/minipay.ts` → `goDeposit`, wired into the lobby and duel flows |
-| Adapt to the highest-balance stablecoin | `lib/stablecoins.ts` → `preferredStablecoin` |
+| Adapt to the highest-balance stablecoin | `lib/stablecoins.ts` → `preferredStablecoin`. **Detection and display only** — entry and stakes are USDm today, see below |
 | Copy: **Network fee · Deposit · Withdraw · Stablecoin** | Enforced by the rule lint over string literals |
 | **No raw `0x…` as the primary identifier** | `lib/identity.ts` — every player is shown a stable alias |
 | Functional at **360×640** | Phone-width app shell, 44px minimum tap targets |
@@ -116,6 +120,18 @@ a static check can catch.
 
 No web fonts are loaded and no third-party script is included, so the external-origin manifest
 MiniPay asks for is just the RPC endpoint and your analytics host.
+
+### Single-token entry — the one compliance gap
+
+`preferredStablecoin` detects whichever supported stablecoin the player holds the most of, and the
+header displays it. **Entry and duel stakes are still denominated in USDm**, because
+`createTournament` fixes one `entryToken` for the whole tournament. A player holding only USDC is
+therefore sent to the Deposit screen rather than being able to pay in what they hold.
+
+Duels are the cheaper half to fix — `createDuel` already takes a token per duel, so the creator's
+preferred stablecoin can be passed straight through. Tournaments need a real decision: either one
+tournament per token per hour, or a swap step before `join`. Do not claim full multi-token support
+in a listing submission until one of those ships.
 
 ---
 
@@ -160,7 +176,7 @@ interface that makes it a drop-in change.
 
 ```bash
 cd contracts
-forge test          # 56 tests
+forge test          # 63 tests
 forge lint          # clean
 ```
 

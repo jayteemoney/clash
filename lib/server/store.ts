@@ -31,7 +31,12 @@ export function storeBackend(): "redis" | "memory" {
   return useRedis ? "redis" : "memory";
 }
 
-async function redis<T>(command: (string | number)[]): Promise<T> {
+/**
+ * One Upstash command over the REST API. Exported so everything that needs durable server state
+ * (the score store here, the rate limiter in ./ratelimit) speaks to Redis through a single
+ * helper rather than each rebuilding the same fetch.
+ */
+export async function redis<T>(command: (string | number)[]): Promise<T> {
   const response = await fetch(REDIS_URL!, {
     method: "POST",
     headers: { Authorization: `Bearer ${REDIS_TOKEN}`, "Content-Type": "application/json" },

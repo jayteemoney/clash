@@ -8,7 +8,7 @@ import { Leaderboard } from "./Leaderboard";
 import { GamePlayer } from "./games/GamePlayer";
 import { Button, Card, Pill, Spinner, Stat } from "./ui";
 import { useMiniPay } from "@/hooks/useMiniPay";
-import { acceptDuel, cancelDuel, createDuel, readDuel, type DuelOnChain } from "@/lib/clash";
+import { DUEL_STATUS_ACCEPTED, acceptDuel, cancelDuel, createDuel, readDuel, type DuelOnChain } from "@/lib/clash";
 import { DEFAULT_TOKEN } from "@/lib/tokens";
 import { canAfford } from "@/lib/stablecoins";
 import { DEEPLINKS, goDeposit } from "@/lib/minipay";
@@ -16,7 +16,7 @@ import { DUEL_STAKES, PLAYER_SHARE_PCT } from "@/lib/config";
 import { CLASH_ADDRESS, explorerTxUrl } from "@/lib/contracts";
 import { GAME_META } from "@/lib/games";
 import { duelSeed } from "@/lib/rng";
-import { currentWindow, gameForWindow } from "@/lib/tournament";
+import { currentWindow, gameForDuel, gameForWindow } from "@/lib/tournament";
 import { aliasFor } from "@/lib/identity";
 
 /**
@@ -40,9 +40,12 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
   const [result, setResult] = useState<DuelResult | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
-  // Duels run whatever game the arena is running this hour, so a duel and a tournament never ask
-  // a player to learn two things at once.
-  const gameId = gameForWindow(currentWindow().start);
+  // A duel plays the game of the hour it was accepted in, and keeps it for the duel's whole life.
+  // Reading the current hour instead would let the rotation change the game out from under a duel
+  // that is still in play — the two sides could be dealt different boards, and a score submitted
+  // after the boundary would be rejected as the wrong game. Until someone accepts, there is no
+  // accepted hour yet, so a duel being created previews the current hour's game.
+  const gameId = duel?.status === DUEL_STATUS_ACCEPTED ? gameForDuel(duel.acceptedAt) : gameForWindow(currentWindow().start);
   const meta = GAME_META[gameId];
 
   const load = useCallback(async () => {
@@ -199,7 +202,9 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
             {meta.emoji}
           </span>
           <div>
-            <p className="text-sm font-bold">Tonight&rsquo;s duel game: {meta.name}</p>
+            <p className="text-sm font-bold">
+              {duel?.status === DUEL_STATUS_ACCEPTED ? "This duel" : "Right now"}: {meta.name}
+            </p>
             <p className="text-ink-faint text-xs">Both players get the same board. Highest score wins the pot.</p>
           </div>
         </div>

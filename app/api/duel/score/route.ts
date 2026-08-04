@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { GAME_IDS, type GameId } from "@/lib/games/types";
 import { loadGame } from "@/lib/games";
 import { duelSeed } from "@/lib/rng";
-import { currentWindow, gameForWindow } from "@/lib/tournament";
+import { gameForDuel } from "@/lib/tournament";
 import { DUEL_DEADLINE_SECONDS, DUEL_STATUS_ACCEPTED, chainNow, readDuel } from "@/lib/clash";
 import { CLASH_ADDRESS } from "@/lib/contracts";
 import { aliasFor } from "@/lib/identity";
@@ -35,7 +35,7 @@ interface Body {
  * of the two duelists, and the score must be reachable on the board this duel actually deals.
  */
 export async function POST(request: Request) {
-  const limit = rateLimit(clientKey(request, "duel-score"), 20, 60_000);
+  const limit = await rateLimit(clientKey(request, "duel-score"), 20, 60_000);
   if (!limit.allowed) {
     return NextResponse.json(
       { error: "Too many submissions. Please wait a moment." },
@@ -70,9 +70,6 @@ export async function POST(request: Request) {
   if (!CLASH_ADDRESS || !settlerConfigured()) {
     return NextResponse.json({ error: "Duels are not available right now." }, { status: 503 });
   }
-  if (gameForWindow(currentWindow().start) !== gameId) {
-    return NextResponse.json({ error: "That game is not running right now." }, { status: 400 });
-  }
 
   let duel;
   try {
@@ -93,6 +90,12 @@ export async function POST(request: Request) {
 
   if ((await chainNow()) >= duel.acceptedAt + DUEL_DEADLINE_SECONDS) {
     return NextResponse.json({ error: "This duel has run out of time." }, { status: 409 });
+  }
+
+  // The duel's game is fixed by the hour it was accepted in, not the hour it is now — a duel
+  // accepted at 12:45 is still live at 13:05, after the hourly rotation has moved on.
+  if (gameForDuel(duel.acceptedAt) !== gameId) {
+    return NextResponse.json({ error: "That is not the game for this duel." }, { status: 400 });
   }
 
   // Rebuild the exact board this duel deals and check the score is reachable on it.

@@ -147,9 +147,22 @@ fi
 # every one of them has to have a way out.
 # ---------------------------------------------------------------------------
 
+# A duel's game is pinned to the hour it was ACCEPTED in, not the current hour — see
+# `gameForDuel` in lib/tournament.ts. This script warps the chain clock forward to close the
+# tournament, so by the time a duel is accepted the rotation has moved on and the duel's game is
+# no longer $GAME. Derive it from `acceptedAt` on chain, exactly the way the app does.
+GAMES=(fastmath wordhunt tilemerge)
+
+duel_game() {
+  # `cast call` annotates large numbers ("1785885043 [1.785e9]"), so keep only the leading digits.
+  accepted_at=$(cast call "$ARENA" "getDuel(uint256)(address,address,address,uint256,uint8,uint64)" "$1" \
+    --rpc-url "$RPC" | sed -n '6p' | grep -o '^[0-9]*')
+  echo "${GAMES[$(((accepted_at / 3600) % 3))]}"
+}
+
 post_duel_score() {
   curl -s -X POST "$APP/api/duel/score" -H 'Content-Type: application/json' \
-    -d "{\"duelId\":$1,\"address\":\"$2\",\"score\":$3,\"gameId\":\"$GAME\"}"
+    -d "{\"duelId\":$1,\"address\":\"$2\",\"score\":$3,\"gameId\":\"$(duel_game "$1")\"}"
   echo
 }
 

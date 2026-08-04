@@ -133,10 +133,29 @@ test("the solver finds nothing on a grid with no adjacency", () => {
 
 test("Word Hunt's ceiling scales with the grid but never drops below a reachable floor", () => {
   const round = buildWordHuntRound(SEED);
-  const total = round.solutions.reduce((sum, w) => sum + wordScore(w), 0);
   const ceiling = wordHunt.maxPlausibleScore(round);
-  assert.ok(ceiling >= 80);
-  assert.ok(ceiling <= total, "the ceiling must be reachable in principle");
+  assert.ok(ceiling >= 100, "the floor must clear what a strong player reaches");
+  assert.ok(ceiling < 5_000, "a fabricated score must still be rejected");
+});
+
+test("Word Hunt never rejects a legitimate score across many boards", () => {
+  // Regression: the old `max(80, total/4)` ceiling was a flat 80 on 293 of 300 boards and
+  // rejected a real score of 88 in testing (TEAM_SPLIT.md → known issues). A ceiling that tells
+  // an honest player their score is impossible is the worst failure this game has.
+  for (let id = 1; id <= 100; id++) {
+    const round = buildWordHuntRound(tournamentSeed(id, "wordhunt"));
+    const ceiling = wordHunt.maxPlausibleScore(round);
+    assert.ok(ceiling >= 100, `board ${id} ceiling ${ceiling} would reject a legitimate run`);
+  }
+});
+
+test("Word Hunt's ceiling rises with a richer board", () => {
+  // The point of deriving the ceiling from the board is that it is not simply a constant.
+  const ceilings = new Set<number>();
+  for (let id = 1; id <= 100; id++) {
+    ceilings.add(wordHunt.maxPlausibleScore(buildWordHuntRound(tournamentSeed(id, "wordhunt"))));
+  }
+  assert.ok(ceilings.size > 1, "a board-derived ceiling must vary between boards");
 });
 
 // ---------------------------------------------------------------------------

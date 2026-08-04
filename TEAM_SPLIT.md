@@ -30,7 +30,7 @@ accounts.
 
 ```bash
 npm install
-npm run check          # typecheck + lint + MiniPay rules + 56 tests
+npm run check          # typecheck + lint + MiniPay rules + 60 tests
 npm run contracts:test # 63 Foundry tests
 ./scripts/e2e-local.sh # full money path on Anvil: tournaments + both duel outcomes
 ```
@@ -56,11 +56,14 @@ other developer** — they are where the two halves can silently drift apart.
 
 | # | Issue | Owner |
 |---|---|---|
-| 1 | **Word Hunt score ceiling is too tight.** In e2e testing a legitimate score of 88 was rejected as impossible. `maxPlausibleScore` in `lib/games/wordhunt.ts` is `max(80, total/4)` — a guess, never validated against real play. A strong player will be told their score is impossible. | B |
+| 1 | ~~**Word Hunt score ceiling is too tight.**~~ **Fixed.** The old `max(80, total/4)` was a flat 80 on 293 of 300 measured boards, which is why a legitimate 88 was rejected. Now derived from the board: the best 30 words × 1.2, floored at 100. Pinned by tests over 100 boards. | B |
 | 2 | **Support URL is a placeholder.** `NEXT_PUBLIC_SUPPORT_URL` defaults to `https://t.me/clasharena`, which may not exist. MiniPay holds you to a **24-hour SLA on critical issues**, so this must be a real, monitored channel. | B |
 | 3 | **No product analytics.** `/stats` covers on-chain numbers only. MiniPay assesses DAU, MAU, retention and top countries, and none of those have a source. | A |
-| 4 | **Score store is in-memory without Upstash.** It does not survive a restart and is not shared between serverless instances. Production must set the Upstash variables. | A |
+| 4 | **Score store is in-memory without Upstash.** It does not survive a restart and is not shared between serverless instances. Production must set the Upstash variables — the rate limiter now depends on them too. | A |
 | 5 | **Settlement is operator-attested.** Documented in the README. Fine to launch on, but say so honestly if asked. | Both |
+| 6 | ~~**Duels broke across the hour boundary.**~~ **Fixed.** A duel's game is now pinned to the hour it was accepted in (`gameForDuel`) rather than the current hour, so a duel accepted at 12:45 still plays its own game at 13:05 instead of having a valid score rejected. | A |
+| 7 | ~~**Contracts did not build from a clean clone.**~~ **Fixed.** `forge-std` and `openzeppelin-contracts` are now git submodules pinned to release tags; `contracts/lib/` is no longer gitignored. | A |
+| 8 | **Multi-token entry is not implemented.** `preferredStablecoin` picks the player's richest stablecoin and the header displays it, but every payment path hardcodes `DEFAULT_TOKEN` (USDm). A player holding only USDC is sent to Deposit. See "Before mainnet" below. | A |
 
 ---
 
