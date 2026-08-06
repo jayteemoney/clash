@@ -259,6 +259,7 @@ export async function readNextDuelId(): Promise<bigint> {
 
 export const DUEL_STATUS = ["None", "Open", "Accepted", "Settled", "Cancelled"] as const;
 
+export const DUEL_STATUS_OPEN = 1;
 export const DUEL_STATUS_ACCEPTED = 2;
 
 /**

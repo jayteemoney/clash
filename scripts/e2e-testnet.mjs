@@ -118,12 +118,61 @@ async function balance(address) {
   return pub.readContract({ address: TOKEN.address, abi: erc20Abi, functionName: "balanceOf", args: [address] });
 }
 
-/** Sends exactly the way the app does: a plain call with `feeCurrency` set, never a signature. */
+/**
+ * Sends the way the app does — a plain call with `feeCurrency` set, never a signature — but with
+ * the gas and fee fields worked out here rather than left to viem.
+ *
+ * That is not a style choice. viem's automatic path calls `eth_estimateGas` with a `maxFeePerGas`,
+ * and the Celo node's balance check on that path ignores `feeCurrency`: it looks at the native
+ * balance, sees zero, and fails with "gas required exceeds allowance (0)" before anything is
+ * broadcast. The transaction itself is fine — sending one with an explicit gas limit produces a
+ * type 0x7b CIP-64 transaction that succeeds from an account holding no CELO at all.
+ *
+ * So: estimate without a fee attached (that path does not balance-check), then price the gas in the
+ * fee currency, which is exactly what a wallet does on the player's behalf.
+ */
 async function send(account, to, data) {
-  const hash = await wallet(account).sendTransaction({ account, to, data, feeCurrency: TOKEN.feeCurrency });
+  const [estimate, gasPrice] = await Promise.all([
+    pub.request({ method: "eth_estimateGas", params: [{ from: account.address, to, data }] }),
+    pub.request({ method: "eth_gasPrice", params: [TOKEN.feeCurrency] }),
+  ]);
+
+  // Paying in a fee currency costs more gas than the bare call: the node also debits the token.
+  // Double the estimate rather than guess at the exact overhead.
+  const gas = (BigInt(estimate) * 2n) + 60_000n;
+
+  const hash = await wallet(account).sendTransaction({
+    account,
+    to,
+    data,
+    feeCurrency: TOKEN.feeCurrency,
+    gas,
+    maxFeePerGas: BigInt(gasPrice) * 2n,
+    maxPriorityFeePerGas: BigInt(gasPrice) / 10n,
+  });
+
   const receipt = await pub.waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") throw new Error(`transaction reverted: ${hash}`);
   return receipt;
+}
+
+/**
+ * Waits until the RPC actually reports the state a confirmed transaction produced.
+ *
+ * A receipt only proves one node saw the block. Forno is a load balancer, so the very next read can
+ * land on a node that has not caught up and answer with the pre-transaction state. Every failure
+ * this script has hit on Sepolia has been a variant of that.
+ */
+async function waitForState(label, read, want, tries = 20) {
+  for (let i = 0; i < tries; i++) {
+    try {
+      if (await want(await read())) return;
+    } catch {
+      // A read that throws is treated the same as a read that is behind: try again.
+    }
+    await new Promise((r) => setTimeout(r, 1500));
+  }
+  throw new Error(`the chain never reported: ${label}`);
 }
 
 async function approveIfNeeded(account, amount) {
@@ -215,8 +264,6 @@ async function runDuel() {
   const stake = unit(1) / 2n; // 0.5
   const [creator, opponent] = PLAYERS;
 
-  const before = { creator: await balance(creator.address), opponent: await balance(opponent.address) };
-
   await approveIfNeeded(creator, stake);
   const created = await send(
     creator,
@@ -228,10 +275,18 @@ async function runDuel() {
   console.log(`duel #${duelId} created by ${creator.address}`);
 
   await approveIfNeeded(opponent, stake);
-  await send(
+  const accepted = await send(
     opponent,
     ARENA,
     encodeFunctionData({ abi: ARENA_ABI, functionName: "acceptDuel", args: [BigInt(duelId)] }),
+  );
+  // The app's own score route reads this status, so wait for the RPC to agree that the duel is
+  // accepted before submitting. Skipping this is how the previous run got "This duel is not in
+  // play" for a duel that had demonstrably been accepted two seconds earlier.
+  await waitForState(
+    `duel ${duelId} is accepted`,
+    () => pub.readContract({ address: ARENA, abi: ARENA_ABI, functionName: "getDuel", args: [BigInt(duelId)] }),
+    (d) => Number(d[4]) === 2,
   );
   console.log(`accepted by ${opponent.address} · escrow ${fmt(await balance(ARENA))}`);
 
@@ -252,18 +307,64 @@ async function runDuel() {
     console.log(`${player.address} → ${score}: ${JSON.stringify(body).slice(0, 220)}`);
   }
 
-  const after = { creator: await balance(creator.address), opponent: await balance(opponent.address) };
-  const won = after.opponent - before.opponent;
-  const lost = after.creator - before.creator;
-  const expected = (stake * 2n * 92n) / 100n - stake;
+  // Assert on the settlement event, not on balance deltas.
+  //
+  // Balances are the wrong instrument here for two reasons. Network fees come out of the very token
+  // being measured, so a delta is the payout minus an unknowable amount of gas; and a balance read
+  // issued straight after settlement can land on an RPC node that has not seen the block, which is
+  // how an earlier version of this script reported the winner *losing* money on a duel that had in
+  // fact paid out correctly. The event carries the exact figures and cannot be stale.
+  // `fromBlock` is pulled back a little: querying from the acceptance block can outrun a node that
+  // is behind it, which fails outright with "block is out of range" rather than returning nothing.
+  const from = accepted.blockNumber > 50n ? accepted.blockNumber - 50n : 0n;
+  let settled = [];
+  await waitForState(
+    `duel ${duelId} settled`,
+    () =>
+      pub.getContractEvents({
+        address: ARENA,
+        abi: ARENA_ABI,
+        eventName: "DuelSettled",
+        args: { duelId: BigInt(duelId) },
+        fromBlock: from,
+        toBlock: "latest",
+      }),
+    (events) => {
+      settled = events;
+      return events.length > 0;
+    },
+  );
 
-  console.log(`\nwinner (45 pts): ${fmt(won)}   expected ${fmt(expected)}`);
-  console.log(`loser  (30 pts): ${fmt(lost)}   expected -${fmt(stake)}`);
+  const { winner, amount, rake } = settled[0].args;
+  const pot = stake * 2n;
+  const expectedRake = (pot * 800n) / 10_000n;
 
-  const escrow = await balance(ARENA);
-  if (won !== expected) throw new Error(`the duel winner received ${won}, expected ${expected}`);
-  if (lost !== -stake) throw new Error(`the duel loser moved by ${lost}, expected -${stake}`);
-  console.log(`arena escrow now: ${fmt(escrow)}`);
+  console.log(`\nwinner:  ${winner}`);
+  console.log(`payout:  ${fmt(amount)}   expected ${fmt(pot - expectedRake)}`);
+  console.log(`rake:    ${fmt(rake)}   expected ${fmt(expectedRake)}`);
+
+  if (winner.toLowerCase() !== opponent.address.toLowerCase()) {
+    throw new Error(`the higher score did not win: paid ${winner}`);
+  }
+  if (amount !== pot - expectedRake) throw new Error(`payout was ${amount}, expected ${pot - expectedRake}`);
+  if (rake !== expectedRake) throw new Error(`rake was ${rake}, expected ${expectedRake}`);
+  if (amount + rake !== pot) throw new Error(`payout and rake do not add up to the pot`);
+
+  // Then prove the money actually left the contract, by reading the arena's balance either side of
+  // the settlement block. Comparing against a fixed number would be wrong — the arena legitimately
+  // also holds the open tournament's pot and any other duel still in play — and reading "now" is
+  // subject to the same replication lag as everything else. Pinning both reads to a block makes the
+  // difference exact.
+  const at = settled[0].blockNumber;
+  const [held, wasHeld] = await Promise.all([
+    pub.readContract({ address: TOKEN.address, abi: erc20Abi, functionName: "balanceOf", args: [ARENA], blockNumber: at }),
+    pub.readContract({ address: TOKEN.address, abi: erc20Abi, functionName: "balanceOf", args: [ARENA], blockNumber: at - 1n }),
+  ]);
+
+  console.log(`\narena escrow: ${fmt(wasHeld)} → ${fmt(held)}  (released ${fmt(wasHeld - held)}, the duel pot)`);
+  if (wasHeld - held !== pot) {
+    throw new Error(`settling released ${wasHeld - held}, expected the whole ${pot} pot`);
+  }
 }
 
 async function settle() {

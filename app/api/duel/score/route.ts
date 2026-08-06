@@ -3,7 +3,7 @@ import { GAME_IDS, type GameId } from "@/lib/games/types";
 import { loadGame } from "@/lib/games";
 import { duelSeed } from "@/lib/rng";
 import { gameForDuel } from "@/lib/tournament";
-import { DUEL_DEADLINE_SECONDS, DUEL_STATUS_ACCEPTED, chainNow, readDuel } from "@/lib/clash";
+import { DUEL_DEADLINE_SECONDS, DUEL_STATUS_ACCEPTED, DUEL_STATUS_OPEN, chainNow, readDuel } from "@/lib/clash";
 import { CLASH_ADDRESS } from "@/lib/contracts";
 import { aliasFor } from "@/lib/identity";
 import { getDuelScores, putDuelScore } from "@/lib/server/store";
@@ -71,11 +71,22 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Duels are not available right now." }, { status: 503 });
   }
 
+  // Read the duel, retrying while it still looks Open.
+  //
+  // Celo's public RPC is a load balancer over several nodes, so a read moments after the opponent
+  // accepted can land on one that has not seen that block yet and report the duel as still Open.
+  // Rejecting on that would tell a player who has just staked and played that their duel "is not in
+  // play" — and it happened on the first testnet run. A couple of short retries costs nothing and
+  // only ever runs on a path that was about to fail anyway.
   let duel;
-  try {
-    duel = await readDuel(BigInt(duelId));
-  } catch {
-    return NextResponse.json({ error: "Could not reach the duel." }, { status: 503 });
+  for (let attempt = 0; ; attempt++) {
+    try {
+      duel = await readDuel(BigInt(duelId));
+    } catch {
+      return NextResponse.json({ error: "Could not reach the duel." }, { status: 503 });
+    }
+    if (duel.status !== DUEL_STATUS_OPEN || attempt >= 3) break;
+    await new Promise((resolve) => setTimeout(resolve, 800));
   }
 
   if (duel.status !== DUEL_STATUS_ACCEPTED) {
