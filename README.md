@@ -17,10 +17,12 @@ also challenge each other to 1v1 **duels** on the same rails.
 
 ```bash
 git clone --recurse-submodules <repo>   # the contracts' Foundry deps are submodules
-npm install
+npm install                       # Node 24 or newer
 cp .env.example .env.local        # practice mode works with no configuration at all
 npm run dev                       # http://localhost:3000
 ```
+
+Full setup, configuration and deployment walkthrough: **[USER_GUIDE.md](USER_GUIDE.md)**.
 
 Already cloned without `--recurse-submodules`? `git submodule update --init --recursive`. Without
 it `forge build` cannot resolve OpenZeppelin or forge-std.
@@ -46,7 +48,7 @@ through the real API, closes the window and settles — then asserts the pot is 
 |---|---|
 | `npm run dev` | Development server |
 | `npm run build` | Production build |
-| `npm test` | Determinism, scheduling, payout and identity tests (60) |
+| `npm test` | Determinism, scheduling, payout, sweep and identity tests (71) |
 | `npm run check` | Typecheck + lint + MiniPay rule lint + tests |
 | `npm run check:bundle` | Enforce the JS bundle budget (needs a build first) |
 | `npm run contracts:test` | Foundry test suite (63) |

@@ -29,11 +29,16 @@ accounts.
 **Verify locally before you touch anything:**
 
 ```bash
+git submodule update --init --recursive   # the contracts' Foundry deps
 npm install
-npm run check          # typecheck + lint + MiniPay rules + 60 tests
+npm run check          # typecheck + lint + MiniPay rules + 71 tests
 npm run contracts:test # 63 Foundry tests
 ./scripts/e2e-local.sh # full money path on Anvil: tournaments + both duel outcomes
 ```
+
+**Node 24 or newer.** The suite runs `.mts` files directly and needs Node's own type stripping.
+
+Step-by-step setup, configuration and deployment instructions live in [USER_GUIDE.md](USER_GUIDE.md).
 
 ---
 
@@ -64,6 +69,39 @@ other developer** — they are where the two halves can silently drift apart.
 | 6 | ~~**Duels broke across the hour boundary.**~~ **Fixed.** A duel's game is now pinned to the hour it was accepted in (`gameForDuel`) rather than the current hour, so a duel accepted at 12:45 still plays its own game at 13:05 instead of having a valid score rejected. | A |
 | 7 | ~~**Contracts did not build from a clean clone.**~~ **Fixed.** `forge-std` and `openzeppelin-contracts` are now git submodules pinned to release tags; `contracts/lib/` is no longer gitignored. | A |
 | 8 | **Multi-token entry is not implemented.** `preferredStablecoin` picks the player's richest stablecoin and the header displays it, but every payment path hardcodes `DEFAULT_TOKEN` (USDm). A player holding only USDC is sent to Deposit. See "Before mainnet" below. | A |
+| 9 | ~~**The duel sweep could strand stakes.**~~ **Fixed.** It scanned a fixed 200-id window back from the newest duel, so once the history grew past that, an older accepted duel still holding two stakes dropped out of range silently and permanently. The sweep now keeps a persisted watchlist: ids are ingested as they appear and removed only when the chain reports the duel terminally finished. Work per sweep is proportional to *live* duels, not total history. Pure logic in `lib/duelSweep.ts`, 11 tests. | A |
+| 10 | ~~**CI pinned Node 22.**~~ **Fixed.** `npm test` runs `.mts` directly and relies on Node's own type stripping, which is only on by default from 23.6 — the suite could not even load. Now Node 24, with `engines` in `package.json` to say so. | A |
+| 11 | **CI has never actually run.** Every job on the workflow B added aborted at start: *"your account is locked due to a billing issue."* The merge gate is currently decorative. | A |
+| 12 | ~~**No duel deadline shown.**~~ **Fixed.** Players had an hour from acceptance and nothing on screen said so. The duel screen now shows a live countdown. | A |
+| 13 | ~~**`e2e-local.sh` destroyed `.env.local`.**~~ **Fixed.** It overwrote the file with Anvil settings and left it there, so the next `npm run dev` pointed at a chain that no longer existed. It now backs up and restores. | A |
+
+---
+
+## The launch sequence
+
+The order matters. Each step is gated on the one before it, and the gates are real — skipping one
+means finding out about a problem with real money on the line instead of testnet money.
+
+| # | Step | Owner | Gate to clear before moving on |
+|---|---|---|---|
+| **0** | Unlock the GitHub account so CI can run | A | A green run on `main` |
+| **1** | Deploy to Celo Sepolia | A | Contract live and verified, address in `.env.local` |
+| **2** | One full cycle on testnet: create → join → score → settle | A | Pot lands with the right players, arena escrow back to 0 |
+| **3** | Provision Upstash, redeploy | A | `/stats` reports **Durable** |
+| **4** | Preview deploy, device-test in MiniPay | B | All 9 checks in B3 pass on a real phone |
+| **5** | Real support channel | B | A monitored link in `NEXT_PUBLIC_SUPPORT_URL` |
+| **6** | Deploy to mainnet + verify on Celoscan | A | Verified source on Celoscan, treasury set to the Safe |
+| **7** | `vercel --prod`, all env vars, confirm cron fires | A | An hourly settle in the logs |
+| **8** | Re-run the full device test against production | B | Passing on preview is not passing on production |
+| **9** | Product analytics | A | DAU/MAU/retention reporting |
+| **10** | Screenshots + PageSpeed | B | 3+ at 360×640 under 500 KB each; 90+ mobile |
+| **11** | talent.app project page and Proof of Ship submission | A | Submitted |
+
+**Steps 1–3 are unblocked right now** and nothing in the codebase is waiting on them. Step 0 can
+happen in parallel; it blocks nothing but the merge gate.
+
+**Do not skip step 2.** It is the only place a wiring mistake between the app and a real deployed
+contract shows up before mainnet.
 
 ---
 
