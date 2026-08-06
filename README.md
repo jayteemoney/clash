@@ -210,9 +210,12 @@ forge script script/OpenTournament.s.sol:OpenTournament \
   --rpc-url https://forno.celo-sepolia.celo-testnet.org --broadcast
 ```
 
-Set `NEXT_PUBLIC_CHAIN_ID=11142220` in the app. On Sepolia only USDm is wired up — the 6-decimal
-fee-currency adapters are not published for the testnet, and shipping a guessed adapter address
-would produce failing transactions that look like app bugs.
+Set `NEXT_PUBLIC_CHAIN_ID=11142220` and **`NEXT_PUBLIC_ENTRY_TOKEN=USDC`** in the app.
+
+All three stablecoins work on Sepolia — both 6-decimal fee-currency adapters are registered there,
+contrary to what this file used to say. But only **USDC** can actually be obtained:
+<https://faucet.circle.com> lists Celo Sepolia. USDm is not mintable, the Mento v1 exchange on
+Sepolia has an empty stable bucket and there is no v2 broker, so there is no route to it at all.
 
 ### Deploy to Celo mainnet
 

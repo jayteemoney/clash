@@ -265,8 +265,10 @@ CRON_SECRET=...                        # openssl rand -hex 32
 
 Run `npm run sync:abi` if you changed the contract.
 
-**On Sepolia only USDm works.** The 6-decimal fee-currency adapters for USDC and USDT are not
-published on the testnet, so the token table only wires USDm there. This is expected.
+**On Sepolia, set `NEXT_PUBLIC_ENTRY_TOKEN=USDC`.** All three stablecoins work there, but USDC is
+the only one you can get: <https://faucet.circle.com> lists Celo Sepolia and hands it out freely.
+USDm is not mintable on the testnet and has no working Mento route, so an entry priced in it cannot
+be paid by anyone. On mainnet leave the variable at `USDm`.
 
 **If `--verify` fails,** the deploy itself still succeeded — verification is a separate call to the
 explorer. Re-run it on its own with the command in the README's deploy section; the contract address

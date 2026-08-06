@@ -115,29 +115,36 @@ for (const absolute of files) {
 
 // 6. The USDC/USDT fee currency must be the adapter, not the token.
 const tokensSource = readFileSync(join(root, "lib/tokens.ts"), "utf8");
-const MAINNET_ADAPTERS = {
-  USDC: "0x2F25deB3848C207fc8E0c34035B3Ba7fC157602B",
-  USDT: "0x0e2a3e05bc9a16f5292a6170456a710cb89c6f72",
-};
-const MAINNET_TOKENS = {
-  USDC: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C",
-  USDT: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e",
-};
 
-for (const symbol of ["USDC", "USDT"]) {
-  const block = tokensSource.match(new RegExp(`${symbol}:\\s*\\{[\\s\\S]*?\\}`, "m"))?.[0] ?? "";
-  const feeLine = block.match(/feeCurrency:\s*"(0x[0-9a-fA-F]{40})"/)?.[1];
-  if (!feeLine) continue;
+// Every 6-decimal entry, on both networks. The old version of this check only knew the mainnet
+// pair and matched the first block it found, so a wrong Sepolia adapter passed silently — which is
+// exactly what shipped. Each pair below was read off the chain's FeeCurrencyDirectory.
+const ADAPTERS = [
+  { net: "mainnet", symbol: "USDC", token: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C", adapter: "0x2F25deB3848C207fc8E0c34035B3Ba7fC157602B" },
+  { net: "mainnet", symbol: "USDT", token: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e", adapter: "0x0e2a3e05bc9a16f5292a6170456a710cb89c6f72" },
+  { net: "sepolia", symbol: "USDC", token: "0x01C5C0122039549AD1493B8220cABEdD739BC44E", adapter: "0xbf1441Ea57f43f35f713431001f35742c88071c7" },
+  { net: "sepolia", symbol: "USDT", token: "0xd077A400968890Eacc75cdc901F0356c943e4fDb", adapter: "0xe19447B12cb0d0220B2a501D8382be2f61CcF92a" },
+];
 
-  if (feeLine.toLowerCase() === MAINNET_TOKENS[symbol].toLowerCase()) {
-    report("lib/tokens.ts", 0, "fee-currency-must-be-adapter", `${symbol} feeCurrency is the token address`);
+for (const { net, symbol, token, adapter } of ADAPTERS) {
+  // Find the entry by its token address rather than by symbol, so mainnet and Sepolia blocks are
+  // told apart instead of the regex always winning on the first one.
+  const entry = tokensSource.match(new RegExp(`address:\\s*"${token}"[\\s\\S]{0,400}?feeCurrency:\\s*"(0x[0-9a-fA-F]{40})"`, "i"));
+  if (!entry) {
+    report("lib/tokens.ts", 0, "fee-currency-entry-missing", `${net} ${symbol} (${token}) has no entry`);
+    continue;
   }
-  if (
-    tokensSource.includes(MAINNET_TOKENS[symbol]) &&
-    !tokensSource.includes(MAINNET_ADAPTERS[symbol]) &&
-    !tokensSource.includes("SEPOLIA_TOKENS")
-  ) {
-    report("lib/tokens.ts", 0, "fee-currency-adapter-missing", `${symbol} adapter address not present`);
+
+  const feeCurrency = entry[1].toLowerCase();
+  if (feeCurrency === token.toLowerCase()) {
+    report("lib/tokens.ts", 0, "fee-currency-must-be-adapter", `${net} ${symbol} feeCurrency is the token address`);
+  } else if (feeCurrency !== adapter.toLowerCase()) {
+    report(
+      "lib/tokens.ts",
+      0,
+      "fee-currency-wrong-adapter",
+      `${net} ${symbol} feeCurrency is ${entry[1]}, expected the adapter ${adapter}`,
+    );
   }
 }
 

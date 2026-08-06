@@ -59,13 +59,28 @@ const RPC = env.NEXT_PUBLIC_RPC_URL || CHAIN.rpcUrls.default.http[0];
 const ARENA = env.NEXT_PUBLIC_CLASH_ADDRESS;
 const CRON_SECRET = env.CRON_SECRET;
 
-// Mirrors lib/tokens.ts. Kept as a literal rather than imported because this script runs outside
-// the Next.js module graph, and a mismatch here would be loud and immediate rather than subtle.
-const TOKEN =
-  CHAIN_ID === 42220
-    ? { symbol: "USDm", address: "0x765DE816845861e75A25fCA122bb6898B8B1282a", decimals: 18 }
-    : { symbol: "USDm", address: "0xEF4d55D6dE8e8d73232827Cd1e9b2F2dBb45bC80", decimals: 18 };
-TOKEN.feeCurrency = TOKEN.address;
+// Mirrors lib/tokens.ts, including the rule that a 6-decimal token's fee currency is its adapter
+// and never the token itself. Kept as a literal rather than imported because this script runs
+// outside the Next.js module graph; a drift here fails loudly on the first transaction.
+const TABLE = {
+  42220: {
+    USDm: { address: "0x765DE816845861e75A25fCA122bb6898B8B1282a", decimals: 18, feeCurrency: "0x765DE816845861e75A25fCA122bb6898B8B1282a" },
+    USDC: { address: "0xcebA9300f2b948710d2653dD7B07f33A8B32118C", decimals: 6, feeCurrency: "0x2F25deB3848C207fc8E0c34035B3Ba7fC157602B" },
+    USDT: { address: "0x48065fbBE25f71C9282ddf5e1cD6D6A887483D5e", decimals: 6, feeCurrency: "0x0e2a3e05bc9a16f5292a6170456a710cb89c6f72" },
+  },
+  11142220: {
+    USDm: { address: "0xEF4d55D6dE8e8d73232827Cd1e9b2F2dBb45bC80", decimals: 18, feeCurrency: "0xEF4d55D6dE8e8d73232827Cd1e9b2F2dBb45bC80" },
+    USDC: { address: "0x01C5C0122039549AD1493B8220cABEdD739BC44E", decimals: 6, feeCurrency: "0xbf1441Ea57f43f35f713431001f35742c88071c7" },
+    USDT: { address: "0xd077A400968890Eacc75cdc901F0356c943e4fDb", decimals: 6, feeCurrency: "0xe19447B12cb0d0220B2a501D8382be2f61CcF92a" },
+  },
+};
+
+const SYMBOL = env.NEXT_PUBLIC_ENTRY_TOKEN || "USDm";
+const TOKEN = { symbol: SYMBOL, ...(TABLE[CHAIN_ID]?.[SYMBOL] ?? {}) };
+if (!TOKEN.address) throw new Error(`no ${SYMBOL} configured for chain ${CHAIN_ID}`);
+
+/** Amounts scale with the token's decimals, so the same run works for 18- and 6-decimal entries. */
+const unit = (whole) => BigInt(whole) * 10n ** BigInt(TOKEN.decimals);
 
 if (!ARENA) throw new Error("NEXT_PUBLIC_CLASH_ADDRESS is not set in .env");
 if (!env.DEPLOYER_PRIVATE_KEY) throw new Error("DEPLOYER_PRIVATE_KEY is not set in .env");
@@ -138,7 +153,7 @@ async function api(path, init) {
 
 async function fanOut() {
   say("Funding the two extra players");
-  const need = 3_000_000_000_000_000_000n; // 3 units each: enough for entries and a duel stake
+  const need = unit(3); // enough for an entry and a duel stake
 
   for (const player of PLAYERS.slice(1)) {
     const held = await balance(player.address);
@@ -197,7 +212,7 @@ async function enterTournament() {
 
 async function runDuel() {
   say("A complete duel, start to finish");
-  const stake = 500_000_000_000_000_000n; // 0.5
+  const stake = unit(1) / 2n; // 0.5
   const [creator, opponent] = PLAYERS;
 
   const before = { creator: await balance(creator.address), opponent: await balance(opponent.address) };
@@ -278,7 +293,7 @@ async function main() {
 
   const funds = await balance(PLAYERS[0].address);
   console.log(`\ndeployer holds ${fmt(funds)}`);
-  if (funds < 7_000_000_000_000_000_000n) {
+  if (funds < unit(7)) {
     throw new Error(
       `not enough ${TOKEN.symbol}. Fund ${PLAYERS[0].address} with at least 7 and run again.`,
     );

@@ -74,6 +74,9 @@ other developer** — they are where the two halves can silently drift apart.
 | 11 | **CI has never actually run.** Every job on the workflow B added aborted at start: *"your account is locked due to a billing issue."* The merge gate is currently decorative. | A |
 | 12 | ~~**No duel deadline shown.**~~ **Fixed.** Players had an hour from acceptance and nothing on screen said so. The duel screen now shows a live countdown. | A |
 | 13 | ~~**`e2e-local.sh` destroyed `.env.local`.**~~ **Fixed.** It overwrote the file with Anvil settings and left it there, so the next `npm run dev` pointed at a chain that no longer existed. It now backs up and restores. | A |
+| 14 | ~~**The lobby could serve tournament 0.**~~ **Fixed.** `ensureTournament` re-read the id after creating it, and Forno load-balances, so the read could hit a node that had not seen the block — it returned `id: 0, playable: true` on the very first live request. Players would have been dealt the board for tournament 0 while their entries went to tournament 1. The id now comes from the `TournamentCreated` log of the receipt. | A |
+| 15 | ~~**Sepolia's 6-decimal adapters were marked unpublished.**~~ **Fixed.** Both are registered in Sepolia's `FeeCurrencyDirectory`: USDC adapter `0xbf1441Ea…71c7`, USDT adapter `0xe19447B1…Cf92a`. The table wired only USDm and set USDC's `feeCurrency` to a different token entirely. The MiniPay lint only validated the mainnet pair, so it never noticed — it now checks all four, matched by token address. | A |
+| 16 | **Two different stablecoins are called USDm on Sepolia.** Legacy `cUSD` at `0xEF4d…bC80` (what the table uses, mirroring mainnet where USDm *is* cUSD) and a newer StableTokenV3 literally symboled `USDm` at `0xdE9e4C…b00b`. Neither is obtainable, so it does not block testing, but the choice should be deliberate before anyone relies on testnet USDm. | A |
 
 ---
 
@@ -123,8 +126,10 @@ forge script script/Deploy.s.sol:Deploy \
 Set in `.env.local`: `NEXT_PUBLIC_CHAIN_ID=11142220`, `NEXT_PUBLIC_CLASH_ADDRESS`,
 `NEXT_PUBLIC_DEPLOY_BLOCK`, `SETTLER_PRIVATE_KEY`, `CRON_SECRET`.
 
-On Sepolia **only USDm works** — the 6-decimal fee-currency adapters are not published for the
-testnet.
+On Sepolia set **`NEXT_PUBLIC_ENTRY_TOKEN=USDC`**. All three stablecoins are wired and both
+6-decimal adapters are registered there, but USDC is the only one obtainable —
+<https://faucet.circle.com> lists Celo Sepolia. USDm cannot be faucetted or swapped for on that
+network at all.
 
 ### A2. One full cycle on testnet
 Create → join → score → settle against the live testnet contract, driven from B's UI. This is the

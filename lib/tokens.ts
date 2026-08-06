@@ -50,9 +50,19 @@ const MAINNET_TOKENS: Record<TokenSymbol, TokenInfo> = {
 };
 
 /**
- * Celo Sepolia. Only USDm is wired up: the 6-decimal fee-currency adapters are not published for
- * the testnet, and shipping a guessed adapter address would produce failing transactions that look
- * like app bugs. Testnet is for the create → join → settle smoke test, which USDm covers.
+ * Celo Sepolia.
+ *
+ * All three tokens work here, adapters included. An earlier version of this file claimed the
+ * 6-decimal adapters were unpublished on the testnet and wired only USDm; that was wrong. Both are
+ * registered in Sepolia's FeeCurrencyDirectory (`0x9212Fb72ae65367A7c887eC4Ad9bE310BAC611BF`), and
+ * each one's `getAdaptedToken()` resolves to the token address below — checked on chain, not
+ * assumed.
+ *
+ * This matters beyond tidiness: **USDC is the only one of the three you can actually obtain on
+ * Sepolia.** cUSD is not mintable, the Mento v1 exchange there has an empty stable bucket and
+ * there is no v2 broker, so USDm cannot be faucetted at all. USDC comes from
+ * https://faucet.circle.com, which lists Celo Sepolia. Set NEXT_PUBLIC_ENTRY_TOKEN=USDC to run a
+ * testnet cycle with money that exists.
  */
 const SEPOLIA_TOKENS: Record<TokenSymbol, TokenInfo> = {
   USDm: {
@@ -66,15 +76,16 @@ const SEPOLIA_TOKENS: Record<TokenSymbol, TokenInfo> = {
     symbol: "USDC",
     address: "0x01C5C0122039549AD1493B8220cABEdD739BC44E",
     decimals: 6,
-    // No published adapter on Sepolia — see note above. Excluded from SUPPORTED_TOKENS.
-    feeCurrency: "0xEF4d55D6dE8e8d73232827Cd1e9b2F2dBb45bC80",
+    // Adapter, NOT the token — same rule as mainnet.
+    feeCurrency: "0xbf1441Ea57f43f35f713431001f35742c88071c7",
     label: "USDC",
   },
   USDT: {
     symbol: "USDT",
     address: "0xd077A400968890Eacc75cdc901F0356c943e4fDb",
     decimals: 6,
-    feeCurrency: "0xEF4d55D6dE8e8d73232827Cd1e9b2F2dBb45bC80",
+    // Adapter, NOT the token.
+    feeCurrency: "0xe19447B12cb0d0220B2a501D8382be2f61CcF92a",
     label: "USDT",
   },
 };
@@ -84,12 +95,25 @@ const IS_SEPOLIA = ACTIVE_CHAIN.id === CELO_SEPOLIA_ID;
 export const TOKENS: Record<TokenSymbol, TokenInfo> = IS_SEPOLIA ? SEPOLIA_TOKENS : MAINNET_TOKENS;
 
 /** Symbols the app will actually transact in, in balance-check order. */
-export const SUPPORTED_SYMBOLS: TokenSymbol[] = IS_SEPOLIA ? ["USDm"] : ["USDm", "USDC", "USDT"];
+export const SUPPORTED_SYMBOLS: TokenSymbol[] = ["USDm", "USDC", "USDT"];
 
 export const SUPPORTED_TOKENS: TokenInfo[] = SUPPORTED_SYMBOLS.map((s) => TOKENS[s]);
 
-/** Entry and stakes default to USDm. */
-export const DEFAULT_TOKEN: TokenInfo = TOKENS.USDm;
+/**
+ * The token tournaments and duels are denominated in.
+ *
+ * USDm everywhere unless `NEXT_PUBLIC_ENTRY_TOKEN` says otherwise. The override exists because the
+ * right answer differs by network: mainnet should price entry in the stablecoin most MiniPay users
+ * hold, while Celo Sepolia only has one of the three you can actually get hold of (USDC, from
+ * Circle's faucet). Without this, a testnet cycle cannot be run at all.
+ *
+ * An unrecognised value falls back to USDm rather than throwing — a typo in an environment variable
+ * should not take the lobby down.
+ */
+const ENTRY_SYMBOL = process.env.NEXT_PUBLIC_ENTRY_TOKEN as TokenSymbol | undefined;
+
+export const DEFAULT_TOKEN: TokenInfo =
+  ENTRY_SYMBOL && SUPPORTED_SYMBOLS.includes(ENTRY_SYMBOL) ? TOKENS[ENTRY_SYMBOL] : TOKENS.USDm;
 
 export function tokenByAddress(address: string): TokenInfo | undefined {
   const lower = address.toLowerCase();
