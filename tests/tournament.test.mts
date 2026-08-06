@@ -54,15 +54,18 @@ test("a duel keeps its game for its whole deadline, across the hour boundary", (
   const acceptedAt = 1_800_000_000 + HOUR_SECONDS - 900;
   const pinned = gameForDuel(acceptedAt);
 
+  // Step through the duel's whole life. At each moment, compare what the duel plays against what
+  // the old "use the current hour" logic would have said. The duel's answer must never move; the
+  // old one must move at least once, or this test is passing on a window that never rolls over.
+  let rotationMoved = false;
+
   for (let offset = 0; offset <= DUEL_DEADLINE_SECONDS; offset += 60) {
-    assert.equal(gameForDuel(acceptedAt), pinned, `drifted ${offset}s after acceptance`);
+    const now = acceptedAt + offset;
+    assert.equal(gameForDuel(acceptedAt), pinned, `the duel's game drifted ${offset}s in`);
+    if (gameForWindow(hourStart(now)) !== pinned) rotationMoved = true;
   }
 
-  // The hour did roll over during that window, and the rotation did move on...
-  const laterHour = hourStart(acceptedAt + DUEL_DEADLINE_SECONDS);
-  assert.notEqual(hourStart(acceptedAt), laterHour, "the test must actually cross a boundary");
-  assert.notEqual(gameForWindow(laterHour), pinned, "the rotation must actually differ");
-  // ...but the duel's game is unchanged, which is the whole point.
+  assert.ok(rotationMoved, "the rotation must actually move, or nothing is being tested");
 });
 
 test("a duel's game matches the hour it was accepted in", () => {

@@ -43,9 +43,23 @@ P3=0x15d34AAf54267DB7D7c367839AAf71A00a2C6A65; KP3=0x47e179ec197488593b187f80a00
 ANVIL_PID=""
 DEV_PID=""
 
+# This script has to point .env.local at Anvil, which means overwriting whatever is there. Put it
+# back afterwards: leaving a developer's config replaced by settings for a chain that no longer
+# exists is a nasty thing to find later.
+ENV_BACKUP=""
+if [ -f .env.local ]; then
+  ENV_BACKUP=".env.local.before-e2e.$$"
+  cp .env.local "$ENV_BACKUP"
+fi
+
 cleanup() {
   [ -n "$DEV_PID" ] && kill "$DEV_PID" 2>/dev/null || true
   [ -n "$ANVIL_PID" ] && kill "$ANVIL_PID" 2>/dev/null || true
+  if [ -n "$ENV_BACKUP" ] && [ -f "$ENV_BACKUP" ]; then
+    mv -f "$ENV_BACKUP" .env.local
+  else
+    rm -f .env.local
+  fi
 }
 trap cleanup EXIT
 
@@ -196,6 +210,7 @@ fi
 say "9/9  Duel that neither player completes"
 P1_BEFORE=$(balance "$P1")
 P3_BEFORE=$(balance "$P3")
+TREASURY_BEFORE=$(balance "$TREASURY")
 
 cast send "$ARENA" "createDuel(address,uint256)" "$USDM" "$STAKE" --rpc-url "$RPC" --private-key "$KP1" >/dev/null
 cast send "$ARENA" "acceptDuel(uint256)" 2 --rpc-url "$RPC" --private-key "$KP3" >/dev/null
@@ -209,12 +224,17 @@ echo
 
 CREATOR_DELTA=$(delta "$(balance "$P1")" "$P1_BEFORE")
 OPPONENT_DELTA=$(delta "$(balance "$P3")" "$P3_BEFORE")
+TREASURY_DELTA=$(delta "$(balance "$TREASURY")" "$TREASURY_BEFORE")
 printf 'creator change : %s USDm  (expect 0, fully refunded)\n' "$(wei_to_eth "$CREATOR_DELTA")"
 printf 'opponent change: %s USDm  (expect 0, fully refunded)\n' "$(wei_to_eth "$OPPONENT_DELTA")"
-printf 'treasury rake  : %s USDm  (unchanged — no contest, no cut)\n' "$(wei_to_eth "$(balance "$TREASURY")")"
+printf 'rake taken     : %s USDm  (expect 0 — no contest, no cut)\n' "$(wei_to_eth "$TREASURY_DELTA")"
 
 if [ "$CREATOR_DELTA" != "0" ] || [ "$OPPONENT_DELTA" != "0" ]; then
   echo "FAIL: an abandoned duel did not refund both stakes in full."
+  exit 1
+fi
+if [ "$TREASURY_DELTA" != "0" ]; then
+  echo "FAIL: the treasury took a rake from a duel nobody played."
   exit 1
 fi
 if [ "$(balance "$ARENA")" != "0" ]; then
