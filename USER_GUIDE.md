@@ -156,13 +156,93 @@ network fees and set a low-balance alert. Full reasoning is in the README's trus
 
 ## 7. Deploy the contract
 
+### First, the four things the deploy needs
+
+Two of these are private keys. Treat the testnet ones as disposable and **never reuse them on
+mainnet** — they will have been in your shell history, your environment, and possibly a log.
+
+#### A. A deployer key
+
+Only used to publish the contract. It ends up with no special power afterwards: ownership goes to
+`OWNER_ADDRESS`, which defaults to the treasury.
+
+```bash
+cast wallet new
+```
+
+```
+Successfully created new keypair.
+Address:     0x1234...
+Private key: 0xabcd...
+```
+
+Save both. `DEPLOYER_PRIVATE_KEY` is the private key, with the `0x`.
+
+#### B. A settler key — a *different* one
+
+The operator that opens each hour's tournament and submits settlements. It lives on your server as
+`SETTLER_PRIVATE_KEY`, so treat it as a hot key: fund it with a couple of dollars of CELO for
+network fees and nothing else.
+
+```bash
+cast wallet new
+```
+
+**Generate a second one. Do not reuse the deployer.** A key on a server should never be a key that
+also holds anything, and separating them means you can rotate the settler without redeploying.
+
+The contract takes `SETTLER_ADDRESS` (the public address) at construction. The private key goes only
+into the app's environment.
+
+#### C. A treasury address
+
+Where the 8% rake lands.
+
+- **Testnet:** any address you control. Your own wallet is fine — reuse the deployer address if you
+  like, it costs nothing.
+- **Mainnet:** a **Gnosis Safe** at <https://safe.celo.org>, with more than one signer. This address
+  receives real revenue and is set at construction, so decide before you deploy.
+
+#### D. An Etherscan API key — from **etherscan.io**, not celoscan.io
+
+Verification now goes through the **Etherscan V2 API**, one host covering every chain, selected by
+chain id. Celo's own V1 endpoints are deprecated and reject requests outright. One key covers Celo
+mainnet and Celo Sepolia both, and the verified source still appears on Celoscan.
+
+1. Sign up at <https://etherscan.io/register>
+2. Confirm the email
+3. <https://etherscan.io/myapikey> → **Add** → name it anything
+4. Copy the key into `ETHERSCAN_API_KEY`
+
+Free tier is 5 calls/second, far more than a deploy needs.
+
+#### E. Fund the two keys from the faucet
+
+Celo Sepolia CELO, for network fees:
+
+- <https://faucet.celo.org/celo-sepolia> — needs a GitHub login
+- <https://cloud.google.com/application/web3/faucet/celo/sepolia> — alternative
+
+Run it **twice**, once for the deployer address and once for the settler address. Then check both
+arrived:
+
+```bash
+cast balance <DEPLOYER_ADDRESS> --rpc-url https://forno.celo-sepolia.celo-testnet.org --ether
+cast balance <SETTLER_ADDRESS>  --rpc-url https://forno.celo-sepolia.celo-testnet.org --ether
+```
+
+Both must be non-zero before you go on. A deploy from an unfunded key fails with a confusing
+insufficient-funds error rather than saying "you have no CELO".
+
+### Then deploy
+
 ```bash
 cd contracts
 
-export DEPLOYER_PRIVATE_KEY=0x...   # fund from faucet.celo.org/celo-sepolia for testnet
+export DEPLOYER_PRIVATE_KEY=0x...   # from A, funded in E
 export TREASURY_ADDRESS=0x...       # where the rake goes — a Safe in production
 export SETTLER_ADDRESS=0x...        # the operator address, funded separately
-export CELOSCAN_API_KEY=...
+export ETHERSCAN_API_KEY=...        # from etherscan.io, works for Celo via API V2
 
 # Celo Sepolia
 forge script script/Deploy.s.sol:Deploy \
@@ -173,11 +253,24 @@ forge script script/Deploy.s.sol:Deploy \
   --rpc-url https://forno.celo.org --broadcast --verify
 ```
 
-Then put the address and deploy block into `.env.local`, and run `npm run sync:abi` if you changed
-the contract.
+The script prints the deployed address. Put it and the deploy block into `.env.local`:
+
+```bash
+NEXT_PUBLIC_CHAIN_ID=11142220
+NEXT_PUBLIC_CLASH_ADDRESS=0x...        # from the script output
+NEXT_PUBLIC_DEPLOY_BLOCK=...           # cast block-number, run right after deploying
+SETTLER_PRIVATE_KEY=0x...              # the settler key from B
+CRON_SECRET=...                        # openssl rand -hex 32
+```
+
+Run `npm run sync:abi` if you changed the contract.
 
 **On Sepolia only USDm works.** The 6-decimal fee-currency adapters for USDC and USDT are not
 published on the testnet, so the token table only wires USDm there. This is expected.
+
+**If `--verify` fails,** the deploy itself still succeeded — verification is a separate call to the
+explorer. Re-run it on its own with the command in the README's deploy section; the contract address
+is in the script output and in `broadcast/`.
 
 ---
 

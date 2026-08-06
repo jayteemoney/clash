@@ -18,6 +18,16 @@ tab_width = 4
 celo = "${CELO_RPC_URL}"
 celo_sepolia = "${CELO_SEPOLIA_RPC_URL}"
 
+# Etherscan API **V2**, not Celoscan's own host.
+#
+# The old per-chain V1 endpoints (api.celoscan.io, api-sepolia.celoscan.io) are deprecated and now
+# answer every request with "You are using a deprecated V1 endpoint" — so `--verify` fails on both
+# networks. V2 is one host for every chain, selected by chainid, and one Etherscan key works across
+# all of them. Celo mainnet and Celo Sepolia are both on the supported list:
+#   https://api.etherscan.io/v2/chainlist
+#
+# The key therefore comes from etherscan.io, not celoscan.io. Results still appear on Celoscan
+# (celoscan.io and sepolia.celoscan.io) — same index, different front door.
 [etherscan]
-celo = { key = "${CELOSCAN_API_KEY}", chain = 42220, url = "https://api.celoscan.io/api" }
-celo_sepolia = { key = "${CELOSCAN_API_KEY}", chain = 11142220, url = "https://api-sepolia.celoscan.io/api" }
+celo = { key = "${ETHERSCAN_API_KEY}", chain = 42220, url = "https://api.etherscan.io/v2/api" }
+celo_sepolia = { key = "${ETHERSCAN_API_KEY}", chain = 11142220, url = "https://api.etherscan.io/v2/api" }

@@ -194,7 +194,7 @@ cd contracts
 export DEPLOYER_PRIVATE_KEY=0x...
 export TREASURY_ADDRESS=0x...
 export SETTLER_ADDRESS=0x...
-export CELOSCAN_API_KEY=...
+export ETHERSCAN_API_KEY=...        # from etherscan.io, works for Celo via API V2
 
 forge script script/Deploy.s.sol:Deploy \
   --rpc-url https://forno.celo-sepolia.celo-testnet.org \
@@ -224,11 +224,14 @@ forge script script/Deploy.s.sol:Deploy --rpc-url https://forno.celo.org --broad
 If verification does not run automatically:
 
 ```bash
+# Etherscan API V2 — one host for every chain, selected by chain id. Celo's own V1 endpoints
+# (api.celoscan.io, api-sepolia.celoscan.io) are deprecated and reject requests. Use 11142220
+# for Celo Sepolia.
 forge verify-contract <ADDRESS> src/ClashArena.sol:ClashArena \
   --chain-id 42220 \
   --verifier etherscan \
-  --verifier-url https://api.celoscan.io/api \
-  --etherscan-api-key "$CELOSCAN_API_KEY" \
+  --verifier-url https://api.etherscan.io/v2/api \
+  --etherscan-api-key "$ETHERSCAN_API_KEY" \
   --constructor-args $(cast abi-encode "constructor(address,address,address)" \
       "$TREASURY_ADDRESS" "$SETTLER_ADDRESS" "$OWNER_ADDRESS") \
   --watch

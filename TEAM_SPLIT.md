@@ -114,7 +114,7 @@ cd contracts
 export DEPLOYER_PRIVATE_KEY=0x...      # fund with a little CELO from faucet.celo.org/celo-sepolia
 export TREASURY_ADDRESS=0x...
 export SETTLER_ADDRESS=0x...           # the operator key, funded separately
-export CELOSCAN_API_KEY=...
+export ETHERSCAN_API_KEY=...        # from etherscan.io, works for Celo via API V2
 
 forge script script/Deploy.s.sol:Deploy \
   --rpc-url https://forno.celo-sepolia.celo-testnet.org --broadcast --verify
