@@ -4,11 +4,20 @@ import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { formatUnits, parseUnits } from "viem";
 import { AppHeader } from "./AppHeader";
+import { Countdown } from "./Countdown";
 import { Leaderboard } from "./Leaderboard";
 import { GamePlayer } from "./games/GamePlayer";
 import { Button, Card, Pill, Spinner, Stat } from "./ui";
 import { useMiniPay } from "@/hooks/useMiniPay";
-import { DUEL_STATUS_ACCEPTED, acceptDuel, cancelDuel, createDuel, readDuel, type DuelOnChain } from "@/lib/clash";
+import {
+  DUEL_DEADLINE_SECONDS,
+  DUEL_STATUS_ACCEPTED,
+  acceptDuel,
+  cancelDuel,
+  createDuel,
+  readDuel,
+  type DuelOnChain,
+} from "@/lib/clash";
 import { DEFAULT_TOKEN } from "@/lib/tokens";
 import { canAfford } from "@/lib/stablecoins";
 import { DEEPLINKS, goDeposit } from "@/lib/minipay";
@@ -280,9 +289,18 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
           ) : null}
 
           {duel.status === 2 ? (
-            <Button onClick={() => setPlaying(true)} disabled={score !== null}>
-              {score !== null ? "Round played" : "Play your round"}
-            </Button>
+            <>
+              {/* Players are on a clock from the moment the duel is accepted, and nothing used to
+                  say so. Miss it and the stake is refunded rather than lost, but finding that out
+                  by surprise is not the experience. */}
+              <div className="border-line flex items-center justify-between rounded-2xl border px-3 py-2">
+                <span className="text-ink-faint text-xs font-semibold">Time left to play your round</span>
+                <Countdown endTime={duel.acceptedAt + DUEL_DEADLINE_SECONDS} onExpire={load} />
+              </div>
+              <Button onClick={() => setPlaying(true)} disabled={score !== null}>
+                {score !== null ? "Round played" : "Play your round"}
+              </Button>
+            </>
           ) : null}
         </Card>
       ) : null}
