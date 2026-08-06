@@ -14,6 +14,10 @@
  */
 import "server-only";
 
+import type { DuelWatch } from "@/lib/duelSweep";
+
+export type { DuelWatch };
+
 export interface ScoreEntry {
   tournamentId: number;
   address: `0x${string}`;
@@ -160,6 +164,50 @@ export async function getDuelScores(duelId: number): Promise<DuelScoreEntry[]> {
   }
 
   return [...(duelMemory.get(duelKey(duelId))?.values() ?? [])];
+}
+
+// ---------------------------------------------------------------------------
+// The duel watchlist
+//
+// The settler has to be able to find every duel that still holds money, however long ago it was
+// created. Scanning a fixed window back from the newest id cannot promise that: once the history
+// grows past the window, an older duel still holding two stakes drops out of it silently and
+// forever.
+//
+// So the sweep keeps its own record instead. It ingests new ids as they appear, drops each duel
+// once the chain says it is terminally finished, and carries the rest forward. The work per sweep
+// is then proportional to how many duels are actually live — normally a handful — rather than to
+// how long the app has been running, and nothing can age out of it.
+// ---------------------------------------------------------------------------
+
+const DUEL_WATCH_KEY = "clash:duelwatch";
+
+let watchMemory: DuelWatch | null = null;
+
+/** The stored watchlist, or null if the settler has never swept on this backend. */
+export async function getDuelWatch(): Promise<DuelWatch | null> {
+  if (useRedis) {
+    const raw = await redis<string | null>(["GET", DUEL_WATCH_KEY]);
+    if (!raw) return null;
+    try {
+      return JSON.parse(raw) as DuelWatch;
+    } catch {
+      // Unreadable means the sweep falls back to a cold start, which is recoverable. Pretending
+      // it parsed would not be.
+      return null;
+    }
+  }
+  return watchMemory;
+}
+
+export async function setDuelWatch(watch: DuelWatch): Promise<void> {
+  if (useRedis) {
+    // Deliberately no TTL. Every other key here expires because it is only needed until a payout
+    // lands; this one is the record of which payouts have *not* happened yet.
+    await redis(["SET", DUEL_WATCH_KEY, JSON.stringify(watch)]);
+    return;
+  }
+  watchMemory = watch;
 }
 
 /** Marks a tournament settled so a retried cron run cannot double-submit. */

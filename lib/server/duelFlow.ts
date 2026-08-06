@@ -9,8 +9,9 @@ import {
   readNextDuelId,
   type DuelOnChain,
 } from "@/lib/clash";
+import { nextWatch, planSweep } from "@/lib/duelSweep";
 import { settleDuel, voidDuel } from "./settler";
-import { getDuelScores } from "./store";
+import { getDuelScores, getDuelWatch, setDuelWatch } from "./store";
 
 /**
  * Resolving duels.
@@ -38,6 +39,15 @@ export interface DuelOutcome {
   winner?: `0x${string}`;
   txHash?: string;
   scores?: { address: string; score: number }[];
+  /** Why the duel could not be resolved. Only ever set alongside `unknown`. */
+  error?: string;
+}
+
+/** Whether the chain still considers this duel capable of holding money. */
+function stillLive(status: DuelOutcome["status"]): boolean {
+  // `unknown` counts as live on purpose: a read or a settle that failed tells us nothing about
+  // where the money is, and dropping a duel on that basis would strand it permanently.
+  return status === "waiting" || status === "not-accepted" || status === "unknown";
 }
 
 /** Higher score wins; a tie goes to whoever submitted first. */
@@ -96,53 +106,42 @@ export async function resolveDuel(duelId: number): Promise<DuelOutcome> {
 }
 
 /**
- * How many consecutive terminally-finished duels end the sweep.
+ * Resolves every duel that is ready, and keeps track of the ones that are not.
  *
- * Duels finish roughly in creation order, so a run this long means everything older is done too.
- * Kept well above 1 because duels do not finish in strict order — a fast duel settling ahead of an
- * older slow one must not convince the sweep that the older one is gone.
- */
-const SETTLED_RUN_TO_STOP = 25;
-
-/**
- * Sweeps every duel that is still accepted and resolves the ones that are ready.
+ * Duels normally settle inline the moment both players submit (see app/api/duel/score). This sweep
+ * is the safety net for the ones where somebody walked away, so the only thing it must never do is
+ * lose sight of a duel that still holds stakes.
  *
- * Walks backwards from the newest id and stops after a run of already-finished duels, so the cost
- * stays flat as the duel history grows rather than rescanning everything every hour. `maxToScan`
- * remains a hard ceiling for the pathological case where that run never appears.
+ * It therefore works from a persisted watchlist rather than a window over recent ids: new duels are
+ * ingested as they appear, finished ones are dropped, and everything else is carried to the next
+ * run. `maxToScan` bounds the reads per sweep, oldest first — a duel past the cap is deferred to
+ * the next hour, never forgotten.
  */
 export async function resolveOpenDuels(maxToScan = 200): Promise<DuelOutcome[]> {
   const next = await readNextDuelId();
   const newest = Number(next) - 1;
   if (newest < 1) return [];
 
-  const oldest = Math.max(1, newest - maxToScan + 1);
+  const { scanning, deferred } = planSweep(newest, await getDuelWatch(), maxToScan);
+
   const outcomes: DuelOutcome[] = [];
-  let finishedRun = 0;
+  const live: number[] = [];
 
-  for (let id = newest; id >= oldest; id--) {
+  for (const id of scanning) {
+    let outcome: DuelOutcome;
     try {
-      const outcome = await resolveDuel(id);
-      if (outcome.status === "settled" || outcome.status === "voided" || outcome.status === "waiting") {
-        outcomes.push(outcome);
-      }
-
-      // Only terminally finished duels advance the run. An Open invite nobody has accepted is
-      // idle but still live, so it must not count — otherwise a block of unaccepted invites would
-      // hide every older accepted duel from the sweep, and those hold real stakes.
-      finishedRun = outcome.status === "finished" ? finishedRun + 1 : 0;
-      if (finishedRun >= SETTLED_RUN_TO_STOP) break;
+      outcome = await resolveDuel(id);
     } catch (error) {
-      // A read that failed tells us nothing about how far back the live duels go, so it must not
-      // count towards the stop condition.
-      finishedRun = 0;
-      outcomes.push({
-        duelId: id,
-        status: "unknown",
-        txHash: error instanceof Error ? error.message : undefined,
-      });
+      // resolveDuel handles its own read failures; reaching here means settleDuel or voidDuel
+      // reverted. Keep the duel on the watchlist and try again next hour.
+      outcome = { duelId: id, status: "unknown", error: error instanceof Error ? error.message : "settle-failed" };
     }
+
+    if (stillLive(outcome.status)) live.push(id);
+    if (outcome.status !== "finished" && outcome.status !== "not-accepted") outcomes.push(outcome);
   }
+
+  await setDuelWatch(nextWatch(newest, deferred, live));
 
   return outcomes;
 }
