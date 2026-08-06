@@ -28,6 +28,10 @@ celo_sepolia = "${CELO_SEPOLIA_RPC_URL}"
 #
 # The key therefore comes from etherscan.io, not celoscan.io. Results still appear on Celoscan
 # (celoscan.io and sepolia.celoscan.io) — same index, different front door.
+#
+# `chainid` is in the query string on purpose. Foundry does not add it for a custom verifier url,
+# and V2 rejects any request without it ("Missing chainid parameter"). Confirmed against the live
+# API when verifying the Sepolia deployment.
 [etherscan]
-celo = { key = "${ETHERSCAN_API_KEY}", chain = 42220, url = "https://api.etherscan.io/v2/api" }
-celo_sepolia = { key = "${ETHERSCAN_API_KEY}", chain = 11142220, url = "https://api.etherscan.io/v2/api" }
+celo = { key = "${ETHERSCAN_API_KEY}", chain = 42220, url = "https://api.etherscan.io/v2/api?chainid=42220" }
+celo_sepolia = { key = "${ETHERSCAN_API_KEY}", chain = 11142220, url = "https://api.etherscan.io/v2/api?chainid=11142220" }

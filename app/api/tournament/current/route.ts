@@ -51,6 +51,13 @@ export async function GET() {
       entryAmount: ENTRY_AMOUNT,
     });
 
+    // Never advertise tournament 0. Ids start at 1, so a zero here means the id could not be
+    // established, and serving it would deal a board keyed to a tournament nobody is entered in.
+    // Practice mode is the honest answer; the next request opens the real one.
+    if (id <= 0n) {
+      return NextResponse.json({ ...base, id: null, pot: "0", players: 0, playable: false, reason: "opening" });
+    }
+
     const onChain = await readTournament(id);
     const submitted = await getScores(Number(id));
 

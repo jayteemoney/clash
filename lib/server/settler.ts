@@ -1,6 +1,6 @@
 import "server-only";
 
-import { createWalletClient, http, type Hex } from "viem";
+import { createWalletClient, http, parseEventLogs, type Hex } from "viem";
 import { privateKeyToAccount } from "viem/accounts";
 import { ACTIVE_CHAIN, RPC_URL, clashArenaAbi, requireClashAddress } from "@/lib/contracts";
 import { publicClient } from "@/lib/minipay";
@@ -41,7 +41,7 @@ function feeCurrency(): `0x${string}` | undefined {
   return configured ? (configured as `0x${string}`) : undefined;
 }
 
-async function writeAndWait(functionName: string, args: readonly unknown[]): Promise<`0x${string}`> {
+async function writeAndWaitReceipt(functionName: string, args: readonly unknown[]) {
   const wallet = settlerWallet();
   const hash = await wallet.writeContract({
     address: requireClashAddress(),
@@ -55,7 +55,11 @@ async function writeAndWait(functionName: string, args: readonly unknown[]): Pro
 
   const receipt = await publicClient().waitForTransactionReceipt({ hash });
   if (receipt.status !== "success") throw new Error(`${functionName} reverted (${hash}).`);
-  return hash;
+  return receipt;
+}
+
+async function writeAndWait(functionName: string, args: readonly unknown[]): Promise<`0x${string}`> {
+  return (await writeAndWaitReceipt(functionName, args)).transactionHash;
 }
 
 /** Reads the id already registered for an hour, or 0 when that hour has no tournament yet. */
@@ -85,13 +89,29 @@ export async function ensureTournament(params: {
   if (existing > 0n) return { id: existing, created: false };
 
   try {
-    const txHash = await writeAndWait("createTournament", [
+    const receipt = await writeAndWaitReceipt("createTournament", [
       BigInt(params.startSeconds),
       BigInt(params.endSeconds),
       params.entryToken,
       params.entryAmount,
     ]);
-    return { id: await tournamentIdForStart(params.startSeconds), created: true, txHash };
+
+    // Take the id from the receipt, not from a follow-up read.
+    //
+    // Forno is a load balancer over several nodes, so a read issued immediately after a write can
+    // land on one that has not seen the block yet and answer 0. That is not hypothetical: the very
+    // first lobby request against Sepolia came back `id: 0, playable: true`, which would have dealt
+    // players the board for tournament 0 while their entries went to tournament 1 — every score
+    // then rejected as impossible. The receipt is already in hand and cannot be stale.
+    const [created] = parseEventLogs({ abi: clashArenaAbi, eventName: "TournamentCreated", logs: receipt.logs });
+    if (created) {
+      return { id: created.args.tournamentId, created: true, txHash: receipt.transactionHash };
+    }
+
+    // No matching log. Fall through to a read rather than guessing.
+    const id = await tournamentIdForStart(params.startSeconds);
+    if (id > 0n) return { id, created: true, txHash: receipt.transactionHash };
+    throw new Error("createTournament produced no TournamentCreated event.");
   } catch (error) {
     const id = await tournamentIdForStart(params.startSeconds);
     if (id > 0n) return { id, created: false };
