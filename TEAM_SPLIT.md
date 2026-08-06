@@ -18,13 +18,13 @@ accounts.
 
 | | State |
 |---|---|
-| `ClashArena.sol` | Written. **63 Foundry tests pass.** `forge lint` clean. **Not deployed anywhere.** |
-| Settler backend | Written. Tournaments and duels both settle. Verified end to end on Anvil. |
+| `ClashArena.sol` | **Live and verified on Celo Sepolia:** [`0xD2557f8f…70D98`](https://sepolia.celoscan.io/address/0xd2557f8ff808349f355a79d81e693a2528570d98), block 32741375. 63 Foundry tests pass, `forge lint` clean. **Not on mainnet.** |
+| Settler backend | Written. **Tournament payouts, duel payouts and abandoned-duel refunds all executed on Sepolia with real transactions.** |
 | Three games | Written. Deterministic boards proven by test. |
 | MiniPay compliance | Written and lint-enforced. **Never verified on a real phone.** |
 | `/stats` | Live, reads chain logs. **Product analytics not wired at all.** |
 | Bundle | 1.32 MB raw / 430 KB gzipped, inside the 2 MB budget. |
-| Deployment | **Nothing is deployed.** No testnet, no mainnet, no Vercel. |
+| Deployment | Testnet contract live. **No mainnet, no Vercel.** |
 
 **Verify locally before you touch anything:**
 
@@ -89,8 +89,8 @@ means finding out about a problem with real money on the line instead of testnet
 | # | Step | Owner | Gate to clear before moving on |
 |---|---|---|---|
 | **0** | Unlock the GitHub account so CI can run | A | A green run on `main` |
-| **1** | Deploy to Celo Sepolia | A | Contract live and verified, address in `.env.local` |
-| **2** | One full cycle on testnet: create → join → score → settle | A | Pot lands with the right players, arena escrow back to 0 |
+| ~~**1**~~ | ~~Deploy to Celo Sepolia~~ **Done.** [`0xD2557f8f…70D98`](https://sepolia.celoscan.io/address/0xd2557f8ff808349f355a79d81e693a2528570d98), verified, deploy block 32741375 | A | ✅ |
+| ~~**2**~~ | ~~One full cycle on testnet~~ **Done.** See below | A | ✅ |
 | **3** | Provision Upstash, redeploy | A | `/stats` reports **Durable** |
 | **4** | Preview deploy, device-test in MiniPay | B | All 9 checks in B3 pass on a real phone |
 | **5** | Real support channel | B | A monitored link in `NEXT_PUBLIC_SUPPORT_URL` |
@@ -101,11 +101,29 @@ means finding out about a problem with real money on the line instead of testnet
 | **10** | Screenshots + PageSpeed | B | 3+ at 360×640 under 500 KB each; 90+ mobile |
 | **11** | talent.app project page and Proof of Ship submission | A | Submitted |
 
-**Steps 1–3 are unblocked right now** and nothing in the codebase is waiting on them. Step 0 can
-happen in parallel; it blocks nothing but the merge gate.
+**Step 3 is next and unblocked.** Step 0 can happen in parallel; it blocks nothing but the merge
+gate.
 
-**Do not skip step 2.** It is the only place a wiring mistake between the app and a real deployed
-contract shows up before mainnet.
+### What step 2 actually proved, on Celo Sepolia
+
+Run with `node scripts/e2e-testnet.mjs`, entry token USDC. Every figure below was read from chain
+events or from balances pinned to the transaction's own block, never from a live balance read.
+
+| | Result |
+|---|---|
+| Tournament #2, 3 players | pot `0.75`, rake `0.06` (8%) |
+| Payouts 50/30/20 | `0.345` · `0.207` · `0.138` — sums to `0.69` |
+| Duel #4, both played | winner paid `0.92`, rake `0.08`, escrow released exactly `1.00` |
+| Duel #2, abandoned | swept after its deadline, **both stakes refunded in full**, no rake taken |
+| Re-running the sweep | reported `already-settled` — no double payout |
+| **Arena escrow at the end** | **`0`** |
+
+And the thing Anvil could never show: **every player transaction was a type `0x7b` CIP-64
+transaction, fees paid in USDC, from accounts holding zero CELO.** That is the MiniPay premise,
+now demonstrated rather than assumed.
+
+**Do not skip this step for mainnet-adjacent changes.** It found four defects that the 71 unit
+tests, 63 contract tests and the full Anvil harness all passed — see known issues 14 and 17.
 
 ---
 
