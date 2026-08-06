@@ -17,7 +17,9 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # 24, not 22. `npm test` runs .mts files directly and relies on Node stripping the types
+          # itself, which is only on by default from 23.6 — on 22 the suite fails to even load.
+          node-version: 24
           cache: npm
 
       - run: npm ci

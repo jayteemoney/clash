@@ -4,6 +4,9 @@
   "private": true,
   "description": "Skill-based tournament arena on Celo, shipped as a MiniPay Mini App.",
   "type": "module",
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "dev": "next dev",
     "build": "next build",
