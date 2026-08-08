@@ -22,9 +22,9 @@ accounts.
 | Settler backend | Written. **Tournament payouts, duel payouts and abandoned-duel refunds all executed on Sepolia with real transactions.** |
 | Three games | Written. Deterministic boards proven by test. |
 | MiniPay compliance | Written and lint-enforced. **Never verified on a real phone.** |
-| `/stats` | Live, reads chain logs. **Product analytics not wired at all.** |
+| `/stats` | Live, reads chain logs. Product analytics instrumented (PostHog, anonymous) but **dark until a key is set**. |
 | Bundle | 1.32 MB raw / 430 KB gzipped, inside the 2 MB budget. |
-| Deployment | Testnet contract live. **No mainnet, no Vercel.** |
+| Deployment | Testnet contract live. Vercel project `dev-jaytees-projects/clash` exists and is linked to the repo, with the score store configured — but **it has never been deployed**. **No mainnet.** |
 
 **Verify locally before you touch anything:**
 
@@ -63,8 +63,8 @@ other developer** — they are where the two halves can silently drift apart.
 |---|---|---|
 | 1 | ~~**Word Hunt score ceiling is too tight.**~~ **Fixed.** The old `max(80, total/4)` was a flat 80 on 293 of 300 measured boards, which is why a legitimate 88 was rejected. Now derived from the board: the best 30 words × 1.2, floored at 100. Pinned by tests over 100 boards. | B |
 | 2 | **Support URL is a placeholder.** `NEXT_PUBLIC_SUPPORT_URL` defaults to `https://t.me/clasharena`, which may not exist. MiniPay holds you to a **24-hour SLA on critical issues**, so this must be a real, monitored channel. | B |
-| 3 | **No product analytics.** `/stats` covers on-chain numbers only. MiniPay assesses DAU, MAU, retention and top countries, and none of those have a source. | A |
-| 4 | **Score store is in-memory without Upstash.** It does not survive a restart and is not shared between serverless instances. Production must set the Upstash variables — the rate limiter now depends on them too. | A |
+| 3 | **No product analytics.** ~~`/stats` covers on-chain numbers only.~~ **Instrumented, not provisioned.** PostHog is wired end to end — seven funnel events, anonymous only, address redaction pinned by 8 tests, dynamically imported and idle-deferred so it stays off the first-paint path. It stays dark until `NEXT_PUBLIC_POSTHOG_KEY` is set; `/stats` now reports **Collecting** or **Not configured**. See A6. | A |
+| 4 | ~~**Score store is in-memory without Upstash.**~~ **Fixed.** Upstash Redis is provisioned and both variables are on the Vercel project in all three environments; the rate limiter now shares it. The gate it was measured against was also wrong: `/stats` said **Durable** whenever the two variables were merely non-empty, so a typo'd URL or a revoked token read as durable while every score write failed. `/stats` now does a `PING` round-trip and reports **Configured but unreachable** when set but not answering, `/api/stats` exposes `scoreStoreHealthy` to alert on, and `npm run check:store` proves it with a write, read-back, TTL and delete. Both branches verified against a live and a deliberately broken endpoint. | A |
 | 5 | **Settlement is operator-attested.** Documented in the README. Fine to launch on, but say so honestly if asked. | Both |
 | 6 | ~~**Duels broke across the hour boundary.**~~ **Fixed.** A duel's game is now pinned to the hour it was accepted in (`gameForDuel`) rather than the current hour, so a duel accepted at 12:45 still plays its own game at 13:05 instead of having a valid score rejected. | A |
 | 7 | ~~**Contracts did not build from a clean clone.**~~ **Fixed.** `forge-std` and `openzeppelin-contracts` are now git submodules pinned to release tags; `contracts/lib/` is no longer gitignored. | A |
@@ -91,18 +91,19 @@ means finding out about a problem with real money on the line instead of testnet
 | **0** | Unlock the GitHub account so CI can run | A | A green run on `main` |
 | ~~**1**~~ | ~~Deploy to Celo Sepolia~~ **Done.** [`0xD2557f8f…70D98`](https://sepolia.celoscan.io/address/0xd2557f8ff808349f355a79d81e693a2528570d98), verified, deploy block 32741375 | A | ✅ |
 | ~~**2**~~ | ~~One full cycle on testnet~~ **Done.** See below | A | ✅ |
-| **3** | Provision Upstash, redeploy | A | `/stats` reports **Durable** |
+| ~~**3**~~ | ~~Provision Upstash~~ **Done.** Upstash for Redis `clash-scores` via the Vercel Marketplace, us-east-1, connected to `dev-jaytees-projects/clash` across production, preview and development | A | ✅ `/stats` reports **Durable** |
 | **4** | Preview deploy, device-test in MiniPay | B | All 9 checks in B3 pass on a real phone |
 | **5** | Real support channel | B | A monitored link in `NEXT_PUBLIC_SUPPORT_URL` |
 | **6** | Deploy to mainnet + verify on Celoscan | A | Verified source on Celoscan, treasury set to the Safe |
 | **7** | `vercel --prod`, all env vars, confirm cron fires | A | An hourly settle in the logs |
 | **8** | Re-run the full device test against production | B | Passing on preview is not passing on production |
-| **9** | Product analytics | A | DAU/MAU/retention reporting |
+| **9** | Product analytics — **instrumented**, needs a PostHog key | A | DAU/MAU/retention reporting |
 | **10** | Screenshots + PageSpeed | B | 3+ at 360×640 under 500 KB each; 90+ mobile |
 | **11** | talent.app project page and Proof of Ship submission | A | Submitted |
 
-**Step 3 is next and unblocked.** Step 0 can happen in parallel; it blocks nothing but the merge
-gate.
+**Step 4 is next — and it is B's, on a real Android phone.** Nothing on A's side moves until it
+passes, because mainnet (step 6) is gated on it. Step 0 can happen in parallel; it blocks nothing
+but the merge gate.
 
 ### What step 2 actually proved, on Celo Sepolia
 
@@ -165,8 +166,41 @@ and `NEXT_PUBLIC_DEPLOY_BLOCK` recorded so `/stats` scans from the right block. 
 command is in the README if `--verify` does not run.
 
 ### A4. Provision the score store
-Upstash Redis via the Vercel Marketplace. Set `UPSTASH_REDIS_REST_URL` and
-`UPSTASH_REDIS_REST_TOKEN`. Confirm `/stats` reports the store as **Durable**, not In-memory.
+
+**Done.** Upstash for Redis via the Vercel Marketplace, so it bills through Vercel.
+
+```bash
+vercel integration accept-terms upstash        # once per team, interactive, human confirmation
+vercel integration add upstash/upstash-kv --name clash-scores
+```
+
+Two traps, both of which cost time:
+
+**The terms acceptance cannot be done by the CLI non-interactively, and the browser page does not
+work.** Opening the `verification_uri` the CLI prints leaves `vercel integration installations`
+reporting none, however many times you retry. `vercel integration accept-terms <name>` — which
+requires CLI **58+**, an interactive terminal, and a typed confirmation — is what actually
+registers it. This is not a version bug; it is a deliberate gate on accepting legal terms.
+
+**The integration does not inject the variable names Upstash's own guide tells you to use.**
+`vercel integration guide upstash/upstash-kv` shows `Redis.fromEnv()`, which reads
+`UPSTASH_REDIS_REST_URL` / `_TOKEN`. What actually lands on the project is `KV_REST_API_URL` /
+`KV_REST_API_TOKEN` — leftover naming from the retired `@vercel/kv`. `lib/server/store.ts` and
+`scripts/check-store.mjs` therefore read either spelling, so provisioning by hand and provisioning
+through the marketplace are an environment difference rather than a code change.
+
+`vercel integration add` also overwrites `.env.local` on the way through. It preserves local-only
+keys, which means a hand-set `UPSTASH_REDIS_REST_URL` silently keeps winning over the marketplace
+database until it is removed.
+
+Region is **us-east-1**, matching Vercel's default `iad1`; a mismatch puts a transatlantic
+round-trip on every score write during settlement.
+
+`npm run check:store` is the real gate. `/stats` reporting *Durable* on the strength of two
+non-empty variables was worth nothing — a typo'd URL or a revoked token read as durable while every
+score write failed, which is the worst way to be wrong about a money-critical path. The page now
+does a round-trip and reports **Configured but unreachable** when the store is set but not
+answering; the script does a full write, read-back, TTL and delete.
 
 ### A5. Deploy the app
 
@@ -178,8 +212,38 @@ Set every server variable from `.env.example` in the Vercel project. `CRON_SECRE
 without it the hourly cron returns 401 to Vercel itself and nothing ever settles.
 
 ### A6. Wire product analytics
-Plausible or PostHog. DAU, MAU, D1/D7/D30 retention, top countries. Link the dashboard from
-`/stats`. This is a listing assessment criterion, not a nice-to-have.
+
+**Instrumented. Not yet provisioned** — it needs a PostHog project key, and until one is set every
+call is a no-op and `/stats` reports **Not configured**.
+
+PostHog, not Plausible: D1/D7/D30 is a cohort retention question, and Plausible does aggregate
+traffic rather than cohorts. It is also the only product analytics tool in Vercel's marketplace —
+Statsig, the other result, is flags and A/B tests.
+
+To finish:
+
+1. Create a project at <https://posthog.com> (or `vercel integration add posthog`, which needs the
+   same terms acceptance as Upstash — see A4).
+2. Set `NEXT_PUBLIC_POSTHOG_KEY`, `NEXT_PUBLIC_POSTHOG_HOST`, and `NEXT_PUBLIC_ANALYTICS_URL` (the
+   shareable dashboard link that `/stats` surfaces) on the Vercel project.
+3. Build the three insights MiniPay assesses: DAU/MAU from unique users, retention from the
+   retention insight on `round_started`, and top countries from PostHog's own GeoIP.
+
+**What is collected, and what deliberately is not.** `lib/analytics.ts` sends anonymous events
+only: a random device id, never a wallet address. The privacy policy already promises "aggregate
+usage data — page views, country, and session counts", so `sanitize` strips anything address-shaped
+out of every property and URL on the way out, and it is pinned by tests. Autocapture and session
+recording are both off — a session recording inside a wallet app is not something to hold at all.
+
+Events: `round_started`, `round_finished`, `tournament_entered`, `deposit_prompted`, `duel_created`,
+`duel_accepted`, `duel_finished`. Enough for the funnel from open → practice → entry → duel.
+
+The client is 75 KB gzipped, dynamically imported and deferred to `requestIdleCallback`, so it is
+off the first-paint path. Bundle is 507 KB gzipped against a 700 KB budget.
+
+**Touches four of B's files** — `app/layout.tsx`, `components/Analytics.tsx` (new),
+`components/Lobby.tsx`, `components/DuelScreen.tsx`. Every change is a one-line `track()` call at an
+existing branch, plus the mount in the layout. Ping B per the merge protocol.
 
 ### A7. Operational readiness
 - Fund the settler key with CELO for network fees, and set a low-balance alert.
