@@ -27,12 +27,60 @@ export interface ScoreEntry {
   submittedAt: number;
 }
 
-const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL;
-const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN;
+// Two spellings, because the same database arrives under different names depending on how it was
+// provisioned. Upstash's own console gives you UPSTASH_REDIS_REST_*; the Vercel Marketplace
+// integration injects KV_REST_API_* instead — a leftover of the retired @vercel/kv naming, and not
+// what Upstash's own getting-started guide shows. Reading both means the app does not care which
+// route was taken, and switching between them is an environment change rather than a code change.
+const REDIS_URL = process.env.UPSTASH_REDIS_REST_URL || process.env.KV_REST_API_URL;
+const REDIS_TOKEN = process.env.UPSTASH_REDIS_REST_TOKEN || process.env.KV_REST_API_TOKEN;
 const useRedis = Boolean(REDIS_URL && REDIS_TOKEN);
 
 export function storeBackend(): "redis" | "memory" {
   return useRedis ? "redis" : "memory";
+}
+
+export type StoreHealth =
+  /** No Redis configured. Scores live in this instance's memory and die with it. */
+  | { backend: "memory"; reachable: false; detail: string }
+  /** Redis configured and answering. */
+  | { backend: "redis"; reachable: true; detail: string }
+  /** Configured but not answering — every score write is failing right now. */
+  | { backend: "redis"; reachable: false; detail: string };
+
+/**
+ * Whether the store is actually usable, as opposed to merely configured.
+ *
+ * {@link storeBackend} only reports which branch the code will take: it returns "redis" the moment
+ * both variables are non-empty, so a typo'd URL or a revoked token still reads as durable while
+ * every score write fails. That is the worst way to be wrong — the operator's dashboard says the
+ * money-critical path is safe at the exact moment it is not. So the health check pays for one
+ * round-trip and reports what the store did, not what it was told to do.
+ */
+export async function storeHealth(): Promise<StoreHealth> {
+  if (!useRedis) {
+    const missing = [
+      REDIS_URL ? null : "UPSTASH_REDIS_REST_URL (or KV_REST_API_URL)",
+      REDIS_TOKEN ? null : "UPSTASH_REDIS_REST_TOKEN (or KV_REST_API_TOKEN)",
+    ].filter(Boolean);
+    return {
+      backend: "memory",
+      reachable: false,
+      detail: `${missing.join(" and ")} not set — scores are per-instance and do not survive a restart.`,
+    };
+  }
+
+  try {
+    const pong = await redis<string>(["PING"]);
+    if (pong !== "PONG") return { backend: "redis", reachable: false, detail: `PING answered ${JSON.stringify(pong)}.` };
+    return { backend: "redis", reachable: true, detail: "Redis answered PING." };
+  } catch (error) {
+    return {
+      backend: "redis",
+      reachable: false,
+      detail: error instanceof Error ? error.message : "Redis did not respond.",
+    };
+  }
 }
 
 /**
