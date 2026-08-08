@@ -92,7 +92,7 @@ means finding out about a problem with real money on the line instead of testnet
 | ~~**1**~~ | ~~Deploy to Celo Sepolia~~ **Done.** [`0xD2557f8f…70D98`](https://sepolia.celoscan.io/address/0xd2557f8ff808349f355a79d81e693a2528570d98), verified, deploy block 32741375 | A | ✅ |
 | ~~**2**~~ | ~~One full cycle on testnet~~ **Done.** See below | A | ✅ |
 | ~~**3**~~ | ~~Provision Upstash~~ **Done.** Upstash for Redis `clash-scores` via the Vercel Marketplace, us-east-1, connected to `dev-jaytees-projects/clash` across production, preview and development | A | ✅ `/stats` reports **Durable** |
-| **4** | Preview deploy, device-test in MiniPay | B | All 9 checks in B3 pass on a real phone |
+| **4** | Device-test in MiniPay — **starts with B0.5** | B | All 9 checks in B3 pass on a real phone |
 | **5** | Real support channel | B | A monitored link in `NEXT_PUBLIC_SUPPORT_URL` |
 | **6** | Deploy to mainnet + verify on Celoscan | A | Verified source on Celoscan, treasury set to the Safe |
 | **7** | `vercel --prod`, all env vars, confirm cron fires | A | An hourly settle in the logs |
@@ -104,6 +104,12 @@ means finding out about a problem with real money on the line instead of testnet
 **Step 4 is next — and it is B's, on a real Android phone.** Nothing on A's side moves until it
 passes, because mainnet (step 6) is gated on it. Step 0 can happen in parallel; it blocks nothing
 but the merge gate.
+
+**The order of 4 and 6 is not yet safe to assume.** Step 4 tests against the Sepolia contract, but
+nobody has confirmed MiniPay can reach a testnet at all — it is a mainnet product. If it cannot,
+the three money checks in B3 are impossible before step 6, and mainnet would have to ship on the
+strength of step 2 alone. **B0.5 answers this in five minutes and should be done before anything
+else.**
 
 ### What step 2 actually proved, on Celo Sepolia
 
@@ -293,6 +299,26 @@ npm run dev            # http://localhost:3000 — practice mode works with no c
 Read these first, in this order: `lib/minipay.ts`, `lib/games/types.ts`, `components/Lobby.tsx`,
 `components/games/GameShell.tsx`. They carry the rules the rest of the UI depends on.
 
+### B0.5. Before anything else — can MiniPay reach Celo Sepolia?
+
+**Five minutes of work that decides the shape of the whole launch sequence.** Open MiniPay on the
+phone, find the developer settings, and answer one question: **can it talk to a testnet, or is it
+mainnet-only?**
+
+The contract is on Celo Sepolia. MiniPay is a mainnet product. Nobody on this project has confirmed
+that MiniPay can be pointed at a testnet at all.
+
+- **If it can** — the sequence stands. B3 runs against Sepolia, and it gates mainnet exactly as
+  planned.
+- **If it cannot** — steps 4 and 6 are in the wrong order. Every B3 check that touches money
+  (5, 6, 7 — entry, deposit, duels) is impossible until the contract is on mainnet, and A would
+  have to deploy to mainnet on the strength of the testnet cycle in step 2 alone, with the device
+  test moving after it. That is a materially riskier launch, so it needs to be a decision rather
+  than a surprise.
+
+Report the answer to A before starting B1. Checks 1–4, 8 and 9 in B3 are unaffected either way and
+can proceed on practice mode regardless.
+
 ### B1. Fix the Word Hunt score ceiling — do this first
 
 `lib/games/wordhunt.ts` → `maxPlausibleScore` currently returns `max(80, ceil(total / 4))`. It is
@@ -314,14 +340,33 @@ to triage by severity; the Celopedia skill documents that pattern.
 
 ### B3. Device testing — the one thing nobody has done
 
-Emulators do not work. You need a real Android phone with MiniPay installed.
+Emulators do not work. You need a real Android phone with MiniPay installed. "Interacting with the
+app" always means the same thing: opening an HTTPS URL inside MiniPay's browser. There is nothing
+to install and no special build — it is a web app, and MiniPay is the browser.
+
+**Two URLs, and the difference decides which checks you can actually run.**
+
+*Your laptop, over a tunnel* — for iterating on your own code:
 
 ```bash
 npm run dev
 npx ngrok http 3000
 ```
 
-Open the HTTPS ngrok URL inside MiniPay and verify, in order:
+Fast loop: save a file, refresh the phone. But your laptop holds **no settler key and no score
+store**, so this is practice mode — three playable games, no tournaments, no entry, no payouts.
+Good for checks 1–4, 8 and 9. Useless for anything involving money.
+
+*A's deployment* — for the checks that involve money:
+
+Checks 5, 6 and 7 need a tournament to exist, and only the deployment has the settler key that
+creates them. Ask A for the URL. You need no Vercel account, no repo access and nothing installed —
+just the link, opened in MiniPay.
+
+You will also need testnet USDC on Celo Sepolia from <https://faucet.circle.com>, which lists the
+network. Do B0.5 first: if MiniPay cannot reach a testnet, checks 5–7 wait for mainnet.
+
+Verify, in order:
 
 1. The app connects with **no prompt and no button**. If a connect button ever appears, that is an
    instant listing failure.
@@ -350,17 +395,27 @@ Report anything broken to A immediately if it touches money.
 
 ### B5. Deployments you own
 
-You do not deploy contracts — that is A. Your deployment responsibilities are:
+You do not deploy contracts — that is A.
 
-- **ngrok** for device testing (above).
-- **Vercel preview deploys.** Every PR you open gets a preview URL. Test your changes there on a
-  real phone before asking for review — localhost behaves differently inside MiniPay.
-  ```bash
-  vercel                # preview
-  ```
-- **Never run `vercel --prod`.** Production promotion is A's, so that env vars and the settler key
-  stay under one owner.
-- After A ships to production, re-run the whole of **B3** against the live URL. Passing on preview
+**You also cannot deploy to A's Vercel project, and this section used to say you could.** The
+project lives on a **Hobby** plan, which is single-user: Hobby accounts cannot have team members, so
+there is no way to give you access, no PR preview URLs on that project, and `vercel` from this repo
+will not reach it. Three ways out, in order of how little they cost:
+
+1. **A deploys, you test the URL.** Nothing for you to set up. This is the default and it is enough
+   for every check in B3.
+2. **Your own Vercel account, your own fork.** Connect your fork and you get your own preview URLs
+   on every push. You will have to set the `NEXT_PUBLIC_*` values from `.env.example` yourself, and
+   you will **not** have the settler key — so your previews stay in practice mode, same as ngrok.
+3. **A upgrades to Pro.** Only then do team members, shared previews and the original plan work.
+
+So your deployment responsibilities are:
+
+- **ngrok** for iterating on your own code (see B3).
+- **Ask A for a deployed URL** whenever you need to test anything involving money.
+- **Never run `vercel --prod`.** Production promotion is A's, so env vars and the settler key stay
+  under one owner.
+- After A ships to production, re-run the whole of **B3** against the live URL. Passing on a tunnel
   is not passing on production.
 
 ### B6. Optional, if there is time
