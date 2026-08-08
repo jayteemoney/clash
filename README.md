@@ -277,9 +277,22 @@ Open the HTTPS URL on an Android phone inside MiniPay and check, in order:
 vercel --prod
 ```
 
-Set every server variable from `.env.example` in the Vercel project. `vercel.json` registers the
-hourly cron on `/api/cron/settle`; it authenticates with `CRON_SECRET`, so set that or the route
-returns 401 to everyone including Vercel.
+Set every server variable from `.env.example` in the Vercel project.
+
+The hourly settle runs on an **Upstash QStash schedule**, not Vercel Cron — Hobby accounts allow
+one cron run per day, and Vercel rejects a more frequent schedule at deploy time rather than
+degrading it. A daily settle would leave players waiting up to 24 hours for an hourly tournament's
+payout, so `vercel.json` carries no crons at all:
+
+```bash
+curl -X POST https://qstash.upstash.io/v2/schedules/https://YOUR-DOMAIN/api/cron/settle \
+  -H "Authorization: Bearer $QSTASH_TOKEN" \
+  -H "Upstash-Cron: 0 * * * *" \
+  -H "Upstash-Forward-Authorization: Bearer $CRON_SECRET"
+```
+
+`/api/cron/settle` authenticates on `Authorization: Bearer $CRON_SECRET`, so set `CRON_SECRET` or
+the route returns 401 to everyone including the scheduler.
 
 Set `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` in production. Without them the score
 store falls back to an in-process map that does not survive a restart and is not shared between

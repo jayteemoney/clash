@@ -10,7 +10,12 @@ export const dynamic = "force-dynamic";
 export const maxDuration = 120;
 
 /**
- * The hourly tick, wired to Vercel Cron in vercel.json.
+ * The hourly tick, driven by an Upstash QStash schedule.
+ *
+ * Not Vercel Cron: Hobby accounts are capped at one cron run per day, and a daily settle would
+ * leave players waiting up to 24 hours for a payout that the product promises within the hour.
+ * Vercel rejects the deployment outright rather than degrading, so `vercel.json` carries no crons
+ * and QStash calls this endpoint instead, forwarding `Authorization: Bearer $CRON_SECRET`.
  *
  * Closes the hour that just ended and opens the one that just started, in that order — a player
  * arriving in the first seconds of a new hour should find a tournament already waiting rather than

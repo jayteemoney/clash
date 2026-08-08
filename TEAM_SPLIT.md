@@ -209,7 +209,25 @@ vercel --prod
 ```
 
 Set every server variable from `.env.example` in the Vercel project. `CRON_SECRET` in particular —
-without it the hourly cron returns 401 to Vercel itself and nothing ever settles.
+without it the hourly settle returns 401 to the scheduler and nothing ever settles.
+
+**The hourly settle does not run on Vercel Cron.** Hobby accounts are capped at one cron run per
+day, and Vercel refuses the deployment outright rather than degrading the schedule — `0 * * * *` in
+`vercel.json` failed every deploy, production included. A daily settle was never an option either:
+players would wait up to 24 hours for an hourly tournament's payout.
+
+So `vercel.json` carries no crons, and Upstash QStash (`clash-settle`, provisioned through the
+marketplace) calls the endpoint instead. Create the schedule once the production URL exists:
+
+```bash
+curl -X POST https://qstash.upstash.io/v2/schedules/https://YOUR-DOMAIN/api/cron/settle \
+  -H "Authorization: Bearer $QSTASH_TOKEN" \
+  -H "Upstash-Cron: 0 * * * *" \
+  -H "Upstash-Forward-Authorization: Bearer $CRON_SECRET"
+```
+
+`QSTASH_TOKEN` is already on the project. Confirm the first firing in the QStash dashboard and in
+the Vercel function logs before treating step 7 as done.
 
 ### A6. Wire product analytics
 
