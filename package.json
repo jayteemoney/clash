@@ -16,6 +16,7 @@
     "test": "node --import ./tests/register.mjs --test \"tests/*.test.mts\"",
     "check:minipay": "node scripts/check-minipay-rules.mjs",
     "check:bundle": "node scripts/check-bundle-size.mjs",
+    "check:store": "node scripts/check-store.mjs",
     "check": "npm run typecheck && npm run lint && npm run check:minipay && npm test",
     "sync:abi": "node scripts/sync-abi.mjs",
     "wordlist": "node scripts/build-wordlist.mjs",
@@ -28,6 +29,7 @@
   "dependencies": {
     "@celo/abis": "^17.0.4",
     "next": "16.2.12",
+    "posthog-js": "^1.414.0",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "server-only": "^0.0.1",

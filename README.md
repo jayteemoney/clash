@@ -120,8 +120,14 @@ a static check can catch.
 | SVG assets only, bundle budget | `public/icon.svg`, `npm run check:bundle` |
 | Support link + Terms + Privacy in-app | `components/AppFooter.tsx`, `app/legal/**` |
 
-No web fonts are loaded and no third-party script is included, so the external-origin manifest
-MiniPay asks for is just the RPC endpoint and your analytics host.
+No web fonts are loaded and nothing is fetched from a third-party CDN — the analytics client is
+bundled from npm rather than injected as a remote `<script>`, and it is dynamically imported and
+deferred to browser idle so it never competes with the first board. The external-origin manifest
+MiniPay asks for is therefore just the RPC endpoint and your analytics host.
+
+Analytics is anonymous by construction: a random device id, never a wallet address, with
+`lib/analytics.ts` stripping anything address-shaped out of every property and URL on the way out.
+That guard is pinned by tests, because it is the privacy policy written as code.
 
 ### Single-token entry — the one compliance gap
 
@@ -271,15 +277,46 @@ Open the HTTPS URL on an Android phone inside MiniPay and check, in order:
 vercel --prod
 ```
 
-Set every server variable from `.env.example` in the Vercel project. `vercel.json` registers the
-hourly cron on `/api/cron/settle`; it authenticates with `CRON_SECRET`, so set that or the route
-returns 401 to everyone including Vercel.
+Set every server variable from `.env.example` in the Vercel project.
+
+The hourly settle runs on an **Upstash QStash schedule**, not Vercel Cron — Hobby accounts allow
+one cron run per day, and Vercel rejects a more frequent schedule at deploy time rather than
+degrading it. A daily settle would leave players waiting up to 24 hours for an hourly tournament's
+payout, so `vercel.json` carries no crons at all:
+
+```bash
+curl -X POST https://qstash.upstash.io/v2/schedules/https://YOUR-DOMAIN/api/cron/settle \
+  -H "Authorization: Bearer $QSTASH_TOKEN" \
+  -H "Upstash-Cron: 0 * * * *" \
+  -H "Upstash-Forward-Authorization: Bearer $CRON_SECRET"
+```
+
+`/api/cron/settle` authenticates on `Authorization: Bearer $CRON_SECRET`, so set `CRON_SECRET` or
+the route returns 401 to everyone including the scheduler.
 
 Set `UPSTASH_REDIS_REST_URL` / `UPSTASH_REDIS_REST_TOKEN` in production. Without them the score
 store falls back to an in-process map that does not survive a restart and is not shared between
 serverless instances — `/stats` reports which backend is live. If the store is lost mid-hour, the
 settler falls back to reading entrants from the contract and refunding them, so funds are never
 stranded, but nobody wins.
+
+Provision it through the Vercel Marketplace, which bills through Vercel and connects the database to
+the project in one step:
+
+```bash
+vercel integration accept-terms upstash      # once per team; interactive, and CLI 58+ only
+vercel integration add upstash/upstash-kv --name clash-scores
+npm run check:store                          # writes, reads back, checks the TTL, deletes
+```
+
+The marketplace injects `KV_REST_API_URL` / `KV_REST_API_TOKEN` rather than the `UPSTASH_REDIS_REST_*`
+names Upstash's own guide shows. The app reads either spelling, so provisioning by hand from
+<https://console.upstash.com> works identically — see `TEAM_SPLIT.md` A4 for the traps.
+
+`npm run check:store` is the check worth trusting. `/stats` saying *Durable* used to mean only that
+two variables were non-empty, so a typo'd URL read as durable while every score write failed; the
+page now pays for a round-trip and says **Configured but unreachable** when the store is set but
+not answering.
 
 ---
 

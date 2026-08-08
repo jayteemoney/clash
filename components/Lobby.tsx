@@ -17,6 +17,7 @@ import { DEFAULT_TOKEN } from "@/lib/tokens";
 import { canAfford } from "@/lib/stablecoins";
 import { DEEPLINKS, goDeposit } from "@/lib/minipay";
 import { PLAYER_SHARE_PCT } from "@/lib/config";
+import { track } from "@/lib/analytics";
 import { explorerTxUrl } from "@/lib/contracts";
 
 type Screen =
@@ -40,6 +41,7 @@ export function Lobby() {
   const playFree = () => {
     if (!tournament) return;
     setPracticeRound((n) => n + 1);
+    track("round_started", { game: tournament.gameId, mode: "practice" });
     setScreen({ name: "playing", mode: "practice", seed: practiceSeed(tournament.gameId, practiceRound) });
   };
 
@@ -51,10 +53,12 @@ export function Lobby() {
 
     // Zero balance is a deposit prompt, never an error. MiniPay listing rule.
     if (wallet.needsDeposit) {
+      track("deposit_prompted", { reason: "empty" });
       goDeposit();
       return;
     }
     if (!canAfford(wallet.balances, DEFAULT_TOKEN, entryAmount)) {
+      track("deposit_prompted", { reason: "short" });
       goDeposit();
       return;
     }
@@ -64,7 +68,9 @@ export function Lobby() {
       const steps = await joinTournament(wallet.address, BigInt(tournament.id), DEFAULT_TOKEN, entryAmount);
       setEntryTx(steps[steps.length - 1].hash);
       setEntered(true);
+      track("tournament_entered", { game: tournament.gameId });
       await Promise.all([refresh(), wallet.refresh()]);
+      track("round_started", { game: tournament.gameId, mode: "ranked" });
       setScreen({ name: "playing", mode: "ranked", seed: tournament.seed });
     } catch (error) {
       setNotice(readableError(error));
@@ -76,6 +82,7 @@ export function Lobby() {
   const finishRound = useCallback(
     async (score: number) => {
       const mode = screen.name === "playing" ? screen.mode : "practice";
+      track("round_finished", { game: tournament?.gameId, mode, score });
 
       if (mode === "practice" || !tournament?.id || !wallet.address) {
         setScreen({ name: "result", mode: "practice", score });
@@ -238,7 +245,12 @@ export function Lobby() {
             ) : null}
 
             {tournament.playable && wallet.address && entered ? (
-              <Button onClick={() => setScreen({ name: "playing", mode: "ranked", seed: tournament.seed })}>
+              <Button
+                onClick={() => {
+                  track("round_started", { game: tournament.gameId, mode: "ranked" });
+                  setScreen({ name: "playing", mode: "ranked", seed: tournament.seed });
+                }}
+              >
                 Play your round
               </Button>
             ) : null}

@@ -143,7 +143,9 @@ fallback, not a broken state.
 | `NEXT_PUBLIC_RPC_URL` | Recommended in production. The default is Forno, which is rate-limited. |
 | `NEXT_PUBLIC_ENTRY_PRICE` | Entry price as a decimal string. Default `0.25`. Keep stakes micro. |
 | `NEXT_PUBLIC_SUPPORT_URL` | **Required for a MiniPay listing.** Must be a channel you actually monitor — the SLA is 24 hours on critical issues. |
-| `UPSTASH_REDIS_REST_URL` / `_TOKEN` | **Required in production.** Without them scores live in a per-instance map that does not survive a restart and is not shared between serverless instances. The rate limiter uses them too. |
+| `UPSTASH_REDIS_REST_URL` / `_TOKEN`<br>(or `KV_REST_API_URL` / `_TOKEN`) | **Required in production.** Without them scores live in a per-instance map that does not survive a restart and is not shared between serverless instances. The rate limiter uses them too. Provision with `vercel integration accept-terms upstash` then `vercel integration add upstash/upstash-kv`, which sets the `KV_*` spelling; prove it works with `npm run check:store`. |
+| `NEXT_PUBLIC_POSTHOG_KEY` / `_HOST` | **Required for a MiniPay listing**, which is assessed on DAU, MAU, retention and top countries. Without a key analytics is a no-op and `/stats` reports **Not configured**. Anonymous only — no wallet address is ever sent. |
+| `NEXT_PUBLIC_ANALYTICS_URL` | The shareable analytics dashboard, linked from `/stats` so a reviewer can read the numbers. |
 | `SETTLER_FEE_CURRENCY` | Optional. Pays the settler's own network fees in a stablecoin. Use the **adapter** address for USDC/USDT, never the token. |
 
 ### About the settler key

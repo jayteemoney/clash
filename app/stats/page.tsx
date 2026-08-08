@@ -1,8 +1,9 @@
 import Link from "next/link";
 import { getStats } from "@/lib/server/indexer";
-import { storeBackend } from "@/lib/server/store";
+import { storeHealth } from "@/lib/server/store";
 import { explorerAddressUrl } from "@/lib/contracts";
-import { APP_NAME } from "@/lib/config";
+import { ANALYTICS_URL, APP_NAME } from "@/lib/config";
+import { ANALYTICS_ENABLED } from "@/lib/analytics";
 
 export const metadata = {
   title: "Clash — Stats",
@@ -20,6 +21,7 @@ export const revalidate = 60;
  */
 export default async function StatsPage() {
   const stats = await getStats();
+  const store = await storeHealth();
 
   return (
     <main className="flex flex-col gap-4 px-4 pt-4 pb-6">
@@ -67,8 +69,23 @@ export default async function StatsPage() {
             }
           />
           <Row label="Network" value={stats.network} />
-          <Row label="Score store" value={storeBackend() === "redis" ? "Durable" : "In-memory (development)"} />
+          <Row
+            label="Score store"
+            value={
+              store.backend === "memory"
+                ? "In-memory (development)"
+                : store.reachable
+                  ? "Durable"
+                  : "Configured but unreachable"
+            }
+            note={store.reachable ? undefined : store.detail}
+          />
           <Row label="Scanned to block" value={stats.scannedToBlock} />
+          <Row
+            label="Product analytics"
+            value={ANALYTICS_ENABLED ? "Collecting" : "Not configured"}
+            note={ANALYTICS_ENABLED ? undefined : "DAU, MAU, retention and top countries have no source."}
+          />
         </dl>
       </Panel>
 
@@ -90,10 +107,16 @@ export default async function StatsPage() {
             Verify these numbers on the block explorer
           </a>
         ) : null}
-        <span>
-          Player counts, retention and top countries are tracked separately in the product analytics
-          dashboard linked from the submission.
-        </span>
+        {ANALYTICS_URL ? (
+          <a href={ANALYTICS_URL} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">
+            Player counts, retention and top countries
+          </a>
+        ) : (
+          <span>
+            Player counts, retention and top countries are tracked separately in the product analytics
+            dashboard linked from the submission.
+          </span>
+        )}
       </div>
     </main>
   );
@@ -134,11 +157,14 @@ function TokenRows({ rows, empty }: { rows: { symbol: string; amount: number }[]
   );
 }
 
-function Row({ label, value }: { label: string; value: string }) {
+function Row({ label, value, note }: { label: string; value: string; note?: string }) {
   return (
-    <div className="flex items-baseline justify-between gap-3">
-      <dt className="text-ink-soft">{label}</dt>
-      <dd className="tabular font-bold">{value}</dd>
+    <div className="flex flex-col gap-0.5">
+      <div className="flex items-baseline justify-between gap-3">
+        <dt className="text-ink-soft">{label}</dt>
+        <dd className="tabular font-bold">{value}</dd>
+      </div>
+      {note ? <dd className="text-ink-faint text-xs">{note}</dd> : null}
     </div>
   );
 }

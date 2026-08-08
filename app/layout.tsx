@@ -1,6 +1,7 @@
 import type { Metadata, Viewport } from "next";
 import "./globals.css";
 import { AppFooter } from "@/components/AppFooter";
+import { Analytics } from "@/components/Analytics";
 import { APP_NAME, APP_TAGLINE } from "@/lib/config";
 
 export const metadata: Metadata = {
@@ -33,6 +34,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
           <div className="flex-1">{children}</div>
           <AppFooter />
         </div>
+        <Analytics />
       </body>
     </html>
   );
