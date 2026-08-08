@@ -27,6 +27,7 @@ import { GAME_META } from "@/lib/games";
 import { duelSeed } from "@/lib/rng";
 import { currentWindow, gameForDuel, gameForWindow } from "@/lib/tournament";
 import { aliasFor } from "@/lib/identity";
+import { track } from "@/lib/analytics";
 
 /**
  * 1v1 duels. Both sides stake the same amount, both play the board seeded from the duel id, and
@@ -91,6 +92,7 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
 
     const amount = parseUnits(stake, DEFAULT_TOKEN.decimals);
     if (wallet.needsDeposit || !canAfford(wallet.balances, DEFAULT_TOKEN, amount)) {
+      track("deposit_prompted", { reason: "duel_create" });
       goDeposit();
       return;
     }
@@ -102,6 +104,7 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
       await wallet.refresh();
 
       if (created !== null) {
+        track("duel_created", { stake });
         setDuelId(Number(created));
         setNotice(null);
       } else {
@@ -119,6 +122,7 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
     setNotice(null);
 
     if (wallet.needsDeposit || !canAfford(wallet.balances, DEFAULT_TOKEN, duel.stake)) {
+      track("deposit_prompted", { reason: "duel_accept" });
       goDeposit();
       return;
     }
@@ -127,6 +131,7 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
     try {
       const steps = await acceptDuel(wallet.address, BigInt(duelId), DEFAULT_TOKEN, duel.stake);
       setLastTx(steps[steps.length - 1].hash);
+      track("duel_accepted", { stake: formatUnits(duel.stake, DEFAULT_TOKEN.decimals) });
       await Promise.all([load(), wallet.refresh()]);
     } catch (error) {
       setNotice(readableError(error));
@@ -156,6 +161,7 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
   const submitScore = async (value: number) => {
     setScore(value);
     setPlaying(false);
+    track("round_finished", { game: gameId, mode: "duel", score: value });
 
     if (!duelId || !wallet.address) return;
 
@@ -172,6 +178,10 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
         setNotice(body.error ?? "Your score could not be recorded.");
         return;
       }
+
+      // Status only. `outcome.winner` is an address; the redaction in lib/analytics would catch it,
+      // but the guard is not a licence to send one.
+      if (body.outcome) track("duel_finished", { status: body.outcome.status });
 
       setResult(body);
       await Promise.all([load(), wallet.refresh()]);
@@ -297,7 +307,13 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
                 <span className="text-ink-faint text-xs font-semibold">Time left to play your round</span>
                 <Countdown endTime={duel.acceptedAt + DUEL_DEADLINE_SECONDS} onExpire={load} />
               </div>
-              <Button onClick={() => setPlaying(true)} disabled={score !== null}>
+              <Button
+                onClick={() => {
+                  track("round_started", { game: gameId, mode: "duel" });
+                  setPlaying(true);
+                }}
+                disabled={score !== null}
+              >
                 {score !== null ? "Round played" : "Play your round"}
               </Button>
             </>
