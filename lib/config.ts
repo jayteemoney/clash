@@ -20,6 +20,13 @@ export const RAKE_BPS = 800;
 
 export const SUPPORT_URL = process.env.NEXT_PUBLIC_SUPPORT_URL ?? "https://t.me/clasharena";
 
+/**
+ * Public link to the product analytics dashboard, surfaced on /stats. MiniPay assesses DAU, MAU,
+ * retention and top countries, and a reviewer needs somewhere to read them — /stats itself can only
+ * report what the chain saw.
+ */
+export const ANALYTICS_URL = process.env.NEXT_PUBLIC_ANALYTICS_URL ?? "";
+
 export const APP_NAME = "Clash";
 export const APP_TAGLINE = "Skill tournaments, hourly.";
 
