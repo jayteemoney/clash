@@ -6,22 +6,22 @@ import type { TileMergeRound } from "@/lib/games/types";
 import { applyMove, hasMoves, placeSpawn, type Direction } from "@/lib/games/tilemerge";
 
 const TILE_STYLES: Record<number, string> = {
-  0: "bg-line/40",
-  2: "bg-paper-raised text-ink",
-  4: "bg-[#e6e0cf] text-ink",
-  8: "bg-[#f0b48a] text-white",
-  16: "bg-[#eb9463] text-white",
-  32: "bg-[#e87449] text-white",
-  64: "bg-[#d95a2b] text-white",
-  128: "bg-vermilion text-white",
-  256: "bg-vermilion-dark text-white",
-  512: "bg-[#8f2b1d] text-white",
-  1024: "bg-gold text-white",
-  2048: "bg-jade text-white",
+  0: "bg-panel-sunk/50 border-transparent",
+  2: "plate bg-panel-raised text-ink",
+  4: "plate bg-panel-sunk text-ink",
+  8: "plate bg-sky text-white",
+  16: "plate bg-sky-dark text-white",
+  32: "plate bg-grape text-white",
+  64: "plate bg-cherry text-white",
+  128: "plate bg-cherry-dark text-white",
+  256: "plate bg-gold text-ink",
+  512: "plate bg-gold-dark text-white",
+  1024: "plate bg-lime text-white",
+  2048: "plate bg-lime-dark text-white",
 };
 
 function tileStyle(value: number) {
-  return TILE_STYLES[value] ?? "bg-ink text-paper";
+  return TILE_STYLES[value] ?? "plate bg-ink text-panel";
 }
 
 function fontSize(value: number) {
@@ -129,12 +129,12 @@ export function TileMergeGame({
       <div
         onPointerDown={onPointerDown}
         onPointerUp={onPointerUp}
-        className="border-line bg-paper-raised grid touch-none grid-cols-4 gap-2 rounded-3xl border p-2"
+        className="plate bevel bg-panel grid touch-none grid-cols-4 gap-2 p-2"
       >
         {board.map((value, index) => (
           <div
             key={index}
-            className={`flex aspect-square items-center justify-center rounded-xl font-extrabold transition-colors ${tileStyle(
+            className={`flex aspect-square items-center justify-center rounded-xl font-black transition-colors ${tileStyle(
               value,
             )} ${fontSize(value)} ${value ? "animate-pop" : ""}`}
           >
@@ -144,18 +144,18 @@ export function TileMergeGame({
       </div>
 
       {stuck ? (
-        <div className="border-vermilion bg-vermilion-soft flex items-center justify-between gap-3 rounded-2xl border p-3">
-          <span className="text-vermilion-dark text-sm font-semibold">No moves left.</span>
+        <div className="plate bevel bg-cherry flex items-center justify-between gap-3 p-3">
+          <span className="text-sm font-black text-white uppercase">No moves left</span>
           <button
             type="button"
             onClick={restart}
-            className="bg-vermilion active:bg-vermilion-dark min-h-[44px] rounded-xl px-4 text-sm font-semibold text-white"
+            className="plate bevel-sm pressable no-select bg-gold text-ink min-h-11 px-4 text-sm font-black uppercase"
           >
             Reset board
           </button>
         </div>
       ) : (
-        <p className="text-ink-faint text-center text-xs">Swipe anywhere on the board</p>
+        <p className="text-panel text-center text-xs font-black uppercase">Swipe anywhere on the board</p>
       )}
     </GameShell>
   );

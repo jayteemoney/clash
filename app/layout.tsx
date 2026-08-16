@@ -23,13 +23,13 @@ export const viewport: Viewport = {
   maximumScale: 1,
   // The games use swipes and rapid taps; a pinch-zoom mid-round is never intentional.
   userScalable: false,
-  themeColor: "#17150F",
+  themeColor: "#2b1e6b",
 };
 
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" className="h-full">
-      <body className="bg-paper text-ink flex min-h-full flex-col antialiased">
+      <body className="bg-field text-ink flex min-h-full flex-col antialiased">
         <div className="app-shell flex min-h-dvh flex-col">
           <div className="flex-1">{children}</div>
           <AppFooter />

@@ -2,6 +2,7 @@
 
 import { useCallback, useMemo, useState } from "react";
 import { GameShell } from "./GameShell";
+import { Icon } from "../ui";
 import type { WordHuntRound } from "@/lib/games/types";
 import { GRID_SIZE, wordScore } from "@/lib/games/wordhunt";
 
@@ -88,14 +89,14 @@ export function WordHuntGame({
       <div className="flex h-8 items-center justify-center">
         {flash ? (
           <span
-            className={`animate-pop rounded-full px-3 py-1 text-sm font-bold ${
-              flash.good ? "bg-jade/15 text-jade" : "bg-vermilion-soft text-vermilion-dark"
+            className={`plate animate-pop rounded-full px-3 py-1 text-sm font-black text-white ${
+              flash.good ? "bg-lime" : "bg-cherry"
             }`}
           >
             {flash.text}
           </span>
         ) : (
-          <span className="tabular text-xl font-extrabold tracking-[0.2em]">{word || " "}</span>
+          <span className="tabular text-panel text-2xl font-black tracking-[0.2em]">{word || " "}</span>
         )}
       </div>
 
@@ -112,17 +113,17 @@ export function WordHuntGame({
                 e.preventDefault();
                 tap(index);
               }}
-              className={`relative flex aspect-square items-center justify-center rounded-2xl border text-2xl font-extrabold transition-colors ${
+              className={`plate no-select relative flex aspect-square items-center justify-center text-2xl font-black ${
                 isLast
-                  ? "border-vermilion bg-vermilion text-white"
+                  ? "bevel-press bg-cherry text-white"
                   : selected
-                    ? "border-vermilion bg-vermilion-soft text-vermilion-dark"
-                    : "border-line bg-paper-raised text-ink active:bg-line"
+                    ? "bevel-press bg-gold text-ink"
+                    : "bevel pressable bg-panel-raised text-ink"
               }`}
             >
               {letter}
               {selected ? (
-                <span className="absolute top-1 right-1.5 text-[10px] font-bold opacity-70">{position + 1}</span>
+                <span className="absolute top-1 right-1.5 text-[10px] font-black opacity-80">{position + 1}</span>
               ) : null}
             </button>
           );
@@ -136,8 +137,9 @@ export function WordHuntGame({
             e.preventDefault();
             setPath([]);
           }}
-          className="border-line bg-paper-raised text-ink-soft active:bg-line min-h-[52px] rounded-2xl border font-semibold"
+          className="plate bevel pressable no-select bg-panel text-ink-soft flex min-h-13 items-center justify-center gap-2 font-black uppercase"
         >
+          <Icon name="cross" className="h-5 w-5" />
           Clear
         </button>
         <button
@@ -146,19 +148,20 @@ export function WordHuntGame({
             e.preventDefault();
             submit();
           }}
-          className="bg-vermilion active:bg-vermilion-dark min-h-[52px] rounded-2xl font-semibold text-white"
+          className="plate bevel pressable no-select bg-lime flex min-h-13 items-center justify-center gap-2 font-black text-white uppercase"
         >
+          <Icon name="check" className="h-5 w-5" />
           Submit
         </button>
       </div>
 
-      <div className="min-h-[44px]">
-        <div className="text-ink-faint mb-1 text-[11px] font-semibold tracking-wide uppercase">
+      <div className="min-h-11">
+        <div className="text-panel mb-1 text-[11px] font-black tracking-wide uppercase">
           Found {found.length}
         </div>
         <div className="flex flex-wrap gap-1.5">
           {found.slice(0, 18).map((w) => (
-            <span key={w} className="border-line bg-paper-raised rounded-full border px-2 py-0.5 text-xs font-semibold">
+            <span key={w} className="border-outline bg-panel-raised rounded-full border-2 px-2 py-0.5 text-xs font-black">
               {w}
             </span>
           ))}

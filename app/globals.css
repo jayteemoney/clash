@@ -1,40 +1,70 @@
 @import "tailwindcss";
 
 /**
- * Clash design tokens.
+ * Clash design tokens — casual arcade.
  *
- * Vermilion on warm neutrals — energetic and competitive without looking like a casino.
- * Everything is sized for a 360×640 phone first; nothing in the app needs a wider viewport.
+ * The look is a vector game-asset pack: saturated primaries, thick dark outlines, chunky rounded
+ * shapes and a hard bottom shadow that makes every control read as a physical, pressable object.
+ * Bold, but minimal — one accent per surface, no gradients on text, no decoration that is not
+ * carrying meaning.
  *
- * No web fonts are loaded. That is deliberate: MiniPay asks for a manifest of every external
- * origin the app touches, and a system font stack keeps that list empty while removing a
- * render-blocking request from the critical path.
+ * Everything is drawn in CSS and inline SVG rather than shipped as images. Two reasons: MiniPay
+ * asks for a manifest of every external origin the app touches, and a raster asset pack would put
+ * megabytes on a 2 MB budget. The plate/bevel utilities below are the whole pack.
+ *
+ * No web fonts are loaded, for the same origin-manifest reason — the system stack keeps that list
+ * empty and removes a render-blocking request from the critical path.
  */
 
 @theme {
-  --color-paper: #eae8e1;
-  --color-paper-raised: #f5f3ee;
-  --color-ink: #17150f;
-  --color-ink-soft: #4a463c;
-  --color-ink-faint: #8a8478;
-  --color-vermilion: #d23517;
-  --color-vermilion-dark: #a72910;
-  --color-vermilion-soft: #fbe7e2;
-  --color-gold: #c8901a;
-  --color-jade: #1f7a55;
-  --color-line: #d6d2c6;
+  /* Deep blue field — the tabletop everything else sits on. */
+  --color-field: #2b1e6b;
+  --color-field-deep: #1d1450;
+  --color-field-soft: #3a2a86;
 
-  --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  /* Panels are warm and light so dark text stays readable on them. */
+  --color-panel: #fff8e7;
+  --color-panel-raised: #ffffff;
+  --color-panel-sunk: #efe3c8;
+
+  /* Outline is the signature of the style: near-black, thick, on everything. */
+  --color-outline: #241a3d;
+  --color-ink: #241a3d;
+  --color-ink-soft: #5b4d7a;
+  --color-ink-faint: #8a7ca8;
+
+  /* Candy accents. One per control; never two competing on the same surface. */
+  --color-cherry: #ff4d4d;
+  --color-cherry-dark: #d62f2f;
+  --color-cherry-soft: #ffe0e0;
+  --color-lime: #4cd137;
+  --color-lime-dark: #38a825;
+  --color-sky: #3aa8ff;
+  --color-sky-dark: #2585d6;
+  --color-grape: #a259ff;
+  --color-gold: #ffc93c;
+  --color-gold-dark: #e0a91b;
+
+  /* Kept so existing chain/stat surfaces referencing them still resolve. */
+  --color-paper: #2b1e6b;
+  --color-paper-raised: #fff8e7;
+  --color-vermilion: #ff4d4d;
+  --color-vermilion-dark: #d62f2f;
+  --color-vermilion-soft: #ffe0e0;
+  --color-jade: #38a825;
+  --color-line: #241a3d;
+
+  --font-sans: ui-rounded, "SF Pro Rounded", "Segoe UI", system-ui, -apple-system, Roboto, "Helvetica Neue", Arial, sans-serif;
   --font-mono: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
 }
 
 :root {
-  color-scheme: light;
+  color-scheme: dark;
 }
 
 html,
 body {
-  background: var(--color-paper);
+  background: var(--color-field);
   color: var(--color-ink);
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
@@ -44,6 +74,9 @@ body {
 
 body {
   -webkit-tap-highlight-color: transparent;
+  /* Faint dot grid: gives the deep field some texture without costing an image request. */
+  background-image: radial-gradient(rgba(255, 255, 255, 0.07) 1.5px, transparent 1.5px);
+  background-size: 22px 22px;
 }
 
 @layer utilities {
@@ -62,11 +95,64 @@ body {
     user-select: none;
     -webkit-user-select: none;
   }
+
+  /*
+   * The pack, in three utilities.
+   *
+   * `plate` is a flat panel with the signature outline. `bevel` adds the hard bottom edge that
+   * makes a control look raised; `bevel-press` is what it becomes while held, so the button
+   * travels down onto its own shadow instead of just changing colour.
+   */
+  .plate {
+    border: 3px solid var(--color-outline);
+    border-radius: 1.25rem;
+  }
+
+  .bevel {
+    box-shadow: 0 5px 0 0 var(--color-outline);
+  }
+
+  .bevel-sm {
+    box-shadow: 0 3px 0 0 var(--color-outline);
+  }
+
+  .bevel-press {
+    box-shadow: 0 1px 0 0 var(--color-outline);
+    transform: translateY(4px);
+  }
+
+  /* Headline treatment: heavy, tight, with a dark rim so it holds up on any accent colour. */
+  .titled {
+    font-weight: 900;
+    letter-spacing: -0.02em;
+    text-shadow:
+      0 2px 0 var(--color-outline),
+      0 -1.5px 0 var(--color-outline),
+      1.5px 0 0 var(--color-outline),
+      -1.5px 0 0 var(--color-outline);
+  }
+
+  .stitch {
+    border: 2px dashed rgba(36, 26, 61, 0.35);
+  }
 }
 
 button,
 a[role="button"] {
   touch-action: manipulation;
+}
+
+/* Pressable: any control carrying `.bevel` drops onto its shadow when held. */
+.pressable {
+  transition:
+    transform 60ms ease-out,
+    box-shadow 60ms ease-out,
+    background-color 120ms ease-out;
+}
+
+.pressable:active:not(:disabled) {
+  box-shadow: 0 1px 0 0 var(--color-outline);
+  transform: translateY(4px);
 }
 
 @keyframes clash-pop {
@@ -107,6 +193,26 @@ a[role="button"] {
   }
 }
 
+@keyframes clash-bob {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-3px);
+  }
+}
+
+@keyframes clash-pulse {
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.08);
+  }
+}
+
 .animate-pop {
   animation: clash-pop 160ms ease-out;
 }
@@ -119,10 +225,24 @@ a[role="button"] {
   animation: clash-shake 180ms ease-in-out;
 }
 
+.animate-bob {
+  animation: clash-bob 2.4s ease-in-out infinite;
+}
+
+.animate-pulse-beat {
+  animation: clash-pulse 700ms ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .animate-pop,
   .animate-rise,
-  .animate-shake {
+  .animate-shake,
+  .animate-bob,
+  .animate-pulse-beat {
     animation: none;
+  }
+
+  .pressable {
+    transition: none;
   }
 }

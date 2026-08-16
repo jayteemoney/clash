@@ -2,6 +2,7 @@
 
 import { useCallback, useState } from "react";
 import { GameShell } from "./GameShell";
+import { Pill } from "../ui";
 import type { FastMathRound } from "@/lib/games/types";
 
 /**
@@ -69,33 +70,31 @@ export function FastMathGame({
       onExpire={finish}
     >
       <div
-        className={`border-line bg-paper-raised flex flex-col items-center gap-2 rounded-3xl border py-6 ${
+        className={`plate bevel bg-panel flex flex-col items-center gap-2 py-5 ${
           feedback === "wrong" ? "animate-shake" : ""
         }`}
       >
-        <div className="flex items-center gap-2">
-          {streak >= 5 ? (
-            <span className="bg-vermilion-soft text-vermilion-dark rounded-full px-2 py-0.5 text-[11px] font-bold">
-              {multiplier}× · {streak} streak
-            </span>
-          ) : (
-            <span className="text-ink-faint text-[11px] font-semibold">
-              {streak > 0 ? `${streak} in a row` : "Answer five in a row for a multiplier"}
-            </span>
-          )}
-        </div>
+        {streak >= 5 ? (
+          <Pill tone="gold">
+            {multiplier}× · {streak} streak
+          </Pill>
+        ) : (
+          <span className="text-ink-soft text-[11px] font-black uppercase">
+            {streak > 0 ? `${streak} in a row` : "Five in a row for a multiplier"}
+          </span>
+        )}
 
-        <div className="tabular text-4xl font-extrabold" aria-live="polite">
+        <div className="tabular text-5xl font-black" aria-live="polite">
           {question.a} {question.op} {question.b}
         </div>
 
         <div
-          className={`tabular flex h-12 min-w-[120px] items-center justify-center rounded-2xl border-2 px-4 text-3xl font-bold ${
+          className={`plate tabular flex h-14 min-w-30 items-center justify-center px-4 text-3xl font-black ${
             feedback === "right"
-              ? "border-jade text-jade"
+              ? "bg-lime text-white"
               : feedback === "wrong"
-                ? "border-vermilion text-vermilion"
-                : "border-line text-ink"
+                ? "bg-cherry text-white"
+                : "bg-panel-sunk text-ink"
           }`}
         >
           {entry || <span className="text-ink-faint">?</span>}
@@ -130,9 +129,9 @@ function Key({
   tone?: "plain" | "accent" | "muted";
 }) {
   const tones = {
-    plain: "bg-paper-raised border-line text-ink active:bg-line",
-    accent: "bg-vermilion border-vermilion text-white active:bg-vermilion-dark",
-    muted: "bg-paper-raised border-line text-ink-soft active:bg-line",
+    plain: "bg-panel-raised text-ink",
+    accent: "bg-lime text-white",
+    muted: "bg-panel-sunk text-ink-soft",
   } as const;
 
   return (
@@ -142,7 +141,7 @@ function Key({
         e.preventDefault();
         onPress();
       }}
-      className={`tabular flex h-14 items-center justify-center rounded-2xl border text-2xl font-bold transition-colors ${tones[tone]}`}
+      className={`plate bevel pressable no-select tabular flex h-15 items-center justify-center text-2xl font-black ${tones[tone]}`}
     >
       {children}
     </button>

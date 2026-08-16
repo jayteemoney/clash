@@ -7,7 +7,7 @@ import { APP_NAME, SUPPORT_URL } from "@/lib/config";
  */
 export function AppFooter() {
   return (
-    <footer className="border-line text-ink-faint mt-8 border-t px-4 py-6 text-xs">
+    <footer className="text-panel/70 mt-8 border-t-[3px] border-white/15 px-4 py-6 text-xs font-semibold">
       <nav className="flex flex-wrap items-center gap-x-4 gap-y-2">
         <Link href="/stats" className="underline underline-offset-2">
           Stats

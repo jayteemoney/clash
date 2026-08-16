@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { ROUND_DURATION_MS } from "@/lib/games/types";
+import { Icon } from "../ui";
 
 /**
  * Owns the 60-second clock and the score readout so the individual games do not each reimplement
@@ -55,28 +56,34 @@ export function GameShell({
 
   return (
     <div className="no-select flex flex-col gap-3 px-4 pb-4">
-      <div className="flex items-baseline justify-between">
-        <div>
-          <h2 className="text-lg leading-tight font-extrabold">{title}</h2>
-          <p className="text-ink-faint text-xs">{tagline}</p>
+      <div className="flex items-stretch gap-2">
+        <div className="plate bevel bg-panel flex flex-1 flex-col justify-center px-3 py-2">
+          <h2 className="text-base leading-tight font-black tracking-tight uppercase">{title}</h2>
+          <p className="text-ink-soft text-[11px] leading-tight font-bold">{tagline}</p>
         </div>
-        <div className="text-right">
-          <div className="text-ink-faint text-[11px] font-semibold tracking-wide uppercase">Score</div>
-          <div className="tabular text-2xl leading-none font-extrabold">{score}</div>
+        <div className="plate bevel bg-gold flex w-21.5 shrink-0 flex-col items-center justify-center px-1 py-2">
+          <span className="text-ink text-[10px] font-black tracking-wide uppercase">Score</span>
+          <span className="tabular text-ink text-2xl leading-none font-black">{score}</span>
         </div>
       </div>
 
-      <div className="flex items-center gap-3">
-        <div className="bg-line h-2 flex-1 overflow-hidden rounded-full">
+      {/*
+        The timer. An hourglass for most of the round; in the last ten seconds it becomes a lit
+        bomb and the bar turns red, so the urgency is legible without reading the number.
+      */}
+      <div className="plate bg-panel-sunk flex items-center gap-2 rounded-full py-1.5 pr-2 pl-2.5">
+        <Icon
+          name={urgent ? "bomb" : "hourglass"}
+          className={`h-5 w-5 shrink-0 ${urgent ? "animate-pulse-beat" : ""}`}
+        />
+        <div className="border-outline h-3.5 flex-1 overflow-hidden rounded-full border-2 bg-white/70">
           <div
-            className={`h-full rounded-full transition-[width] duration-100 ease-linear ${
-              urgent ? "bg-vermilion" : "bg-ink"
-            }`}
+            className={`h-full transition-[width] duration-100 ease-linear ${urgent ? "bg-cherry" : "bg-lime"}`}
             style={{ width: `${fraction * 100}%` }}
           />
         </div>
         <span
-          className={`tabular w-9 text-right text-lg font-bold ${urgent ? "text-vermilion" : "text-ink-soft"}`}
+          className={`tabular w-8 text-right text-lg font-black ${urgent ? "text-cherry-dark" : "text-ink"}`}
           aria-label={`${seconds} seconds left`}
         >
           {seconds}

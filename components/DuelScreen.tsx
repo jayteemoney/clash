@@ -209,15 +209,15 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
       <AppHeader wallet={wallet} />
 
       <div className="flex items-center justify-between">
-        <h1 className="text-xl font-extrabold">Duels</h1>
-        <Link href="/" className="text-ink-faint text-sm underline underline-offset-2">
+        <h1 className="titled text-gold text-2xl">Duels</h1>
+        <Link href="/" className="text-panel text-sm font-black uppercase underline underline-offset-2">
           Back to the arena
         </Link>
       </div>
 
       <Card className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
-          <span className="bg-ink text-paper flex h-8 w-8 items-center justify-center rounded-lg text-xs font-extrabold">
+          <span className="plate bevel-sm bg-grape flex h-10 w-10 items-center justify-center rounded-xl text-base">
             {meta.emoji}
           </span>
           <div>
@@ -233,15 +233,15 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
       </Card>
 
       {notice ? (
-        <div className="border-vermilion bg-vermilion-soft text-vermilion-dark rounded-2xl border px-3 py-2 text-sm font-semibold">
+        <div className="plate bevel-sm bg-cherry px-3 py-2 text-sm font-black text-white">
           {notice}
         </div>
       ) : null}
 
       {score !== null ? (
         <Card className="flex flex-col items-center gap-1 py-6 text-center">
-          <span className="text-ink-faint text-[11px] font-semibold tracking-wide uppercase">Your duel score</span>
-          <span className="tabular text-4xl font-extrabold">{score}</span>
+          <span className="text-ink-soft text-[11px] font-black tracking-wide uppercase">Your duel score</span>
+          <span className="tabular text-5xl font-black">{score}</span>
           {submitting ? (
             <Spinner label="Sending your score…" />
           ) : (
@@ -253,7 +253,7 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
       {duelId && duel ? (
         <Card className="flex flex-col gap-3">
           <div className="flex items-center justify-between">
-            <h2 className="text-sm font-extrabold tracking-wide uppercase">Duel #{duelId}</h2>
+            <h2 className="titled text-panel text-base">Duel #{duelId}</h2>
             <Pill tone={duel.status === 2 ? "good" : duel.status === 1 ? "hot" : "neutral"}>
               {["Not found", "Waiting for an opponent", "In play", "Paid out", "Withdrawn"][duel.status]}
             </Pill>
@@ -303,8 +303,8 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
               {/* Players are on a clock from the moment the duel is accepted, and nothing used to
                   say so. Miss it and the stake is refunded rather than lost, but finding that out
                   by surprise is not the experience. */}
-              <div className="border-line flex items-center justify-between rounded-2xl border px-3 py-2">
-                <span className="text-ink-faint text-xs font-semibold">Time left to play your round</span>
+              <div className="plate bg-panel-sunk flex items-center justify-between px-3 py-2">
+                <span className="text-ink-soft text-xs font-black uppercase">Time left to play your round</span>
                 <Countdown endTime={duel.acceptedAt + DUEL_DEADLINE_SECONDS} onExpire={load} />
               </div>
               <Button
@@ -323,7 +323,7 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
 
       {!duelId ? (
         <Card className="flex flex-col gap-3">
-          <h2 className="text-sm font-extrabold tracking-wide uppercase">Start a duel</h2>
+          <h2 className="titled text-panel text-base">Start a duel</h2>
 
           <div className="grid grid-cols-3 gap-2">
             {DUEL_STAKES.map((option) => (
@@ -331,10 +331,8 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
                 key={option}
                 type="button"
                 onClick={() => setStake(option)}
-                className={`tabular min-h-[52px] rounded-2xl border text-base font-bold transition-colors ${
-                  stake === option
-                    ? "border-vermilion bg-vermilion text-white"
-                    : "border-line bg-paper-raised text-ink"
+                className={`plate no-select tabular min-h-13 text-base font-black ${
+                  stake === option ? "bevel-press bg-cherry text-white" : "bevel pressable bg-panel-raised text-ink"
                 }`}
               >
                 {option}
@@ -350,7 +348,7 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
             <p className="text-ink-faint text-xs">Open Clash in MiniPay to create a duel.</p>
           )}
 
-          <p className="text-ink-faint text-xs leading-relaxed">
+          <p className="text-panel/80 text-xs leading-relaxed font-semibold">
             Your stake is held until the duel is settled. If nobody accepts, withdraw it and it comes
             straight back.
           </p>
@@ -363,7 +361,7 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
             setDuel(null);
             setScore(null);
           }}
-          className="text-ink-faint text-xs underline underline-offset-2"
+          className="text-panel/80 text-xs font-bold underline underline-offset-2"
         >
           Start a different duel
         </button>
@@ -374,7 +372,7 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
           href={explorerTxUrl(lastTx)}
           target="_blank"
           rel="noopener noreferrer"
-          className="text-ink-faint text-xs underline underline-offset-2"
+          className="text-panel/80 text-xs font-bold underline underline-offset-2"
         >
           View the last transaction on the block explorer
         </a>
@@ -382,7 +380,7 @@ export function DuelScreen({ initialDuelId }: { initialDuelId: number | null }) 
 
       {duelId ? (
         <section>
-          <h2 className="mb-2 text-sm font-extrabold tracking-wide uppercase">This hour&rsquo;s arena</h2>
+          <h2 className="titled text-panel mb-2 text-base">This hour&rsquo;s arena</h2>
           <Leaderboard tournamentId={null} />
         </section>
       ) : null}
@@ -424,11 +422,11 @@ function DuelResultLine({ result, you }: { result: DuelResult | null; you: `0x${
     const won = you && outcome.winner?.toLowerCase() === you.toLowerCase();
     return (
       <div className="flex flex-col items-center gap-1">
-        <span className={`text-sm font-bold ${won ? "text-jade" : "text-ink-soft"}`}>
+        <span className={`text-sm font-black ${won ? "text-lime-dark" : "text-ink-soft"}`}>
           {won ? "You won the duel." : "Your opponent took this one."}
         </span>
         {outcome.txHash ? (
-          <a href={DEEPLINKS.receipt(outcome.txHash)} className="text-vermilion text-xs font-semibold underline">
+          <a href={DEEPLINKS.receipt(outcome.txHash)} className="text-cherry-dark text-xs font-black underline">
             View the payout receipt
           </a>
         ) : null}
@@ -462,15 +460,15 @@ function ShareRow({ url }: { url: string }) {
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="border-line bg-paper flex items-center gap-2 rounded-xl border px-3 py-2">
-        <span className="text-ink-faint flex-1 truncate text-xs">{url}</span>
-        <button type="button" onClick={copy} className="text-vermilion text-xs font-bold">
+      <div className="plate bg-panel-sunk flex items-center gap-2 rounded-xl px-3 py-2">
+        <span className="text-ink-soft flex-1 truncate text-xs font-semibold">{url}</span>
+        <button type="button" onClick={copy} className="text-cherry-dark text-xs font-black uppercase">
           {copied ? "Copied" : "Copy"}
         </button>
       </div>
       <a
         href={DEEPLINKS.inviteFriends}
-        className="border-line bg-paper-raised flex min-h-[48px] items-center justify-center rounded-xl border text-sm font-semibold"
+        className="plate bevel pressable bg-panel flex min-h-12 items-center justify-center text-sm font-black uppercase"
       >
         Invite a friend
       </a>

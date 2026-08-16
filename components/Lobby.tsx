@@ -7,7 +7,7 @@ import { AppHeader } from "./AppHeader";
 import { Countdown } from "./Countdown";
 import { Leaderboard } from "./Leaderboard";
 import { GamePlayer } from "./games/GamePlayer";
-import { Button, Card, Pill, Spinner, Stat } from "./ui";
+import { Banner, Button, Card, Icon, Pill, Spinner, Stat } from "./ui";
 import { useMiniPay } from "@/hooks/useMiniPay";
 import { useTournament } from "@/hooks/useTournament";
 import { GAME_META } from "@/lib/games";
@@ -136,18 +136,25 @@ export function Lobby() {
       <main className="flex flex-col gap-4 px-4 pb-6">
         <AppHeader wallet={wallet} />
 
-        <Card className="flex flex-col items-center gap-2 py-8 text-center">
-          <span className="text-ink-faint text-[11px] font-semibold tracking-wide uppercase">
+        <Banner tone={screen.mode === "practice" ? "sky" : "cherry"}>
+          {screen.mode === "practice" ? "Practice Over" : "Round Complete"}
+        </Banner>
+
+        <Card className="flex flex-col items-center gap-2 py-7 text-center">
+          <Icon name="trophy" className="animate-bob h-12 w-12" />
+          <span className="text-ink-soft text-[11px] font-black tracking-wide uppercase">
             {screen.mode === "practice" ? "Practice score" : "Your score"}
           </span>
-          <span className="tabular text-5xl font-extrabold">{screen.score}</span>
+          <span className="tabular text-6xl leading-none font-black">{screen.score}</span>
           {screen.mode === "ranked" && screen.rank ? (
-            <span className="text-ink-soft text-sm font-semibold">
+            <Pill tone="gold">
               Currently {ordinal(screen.rank)} of {screen.total}
-            </span>
+            </Pill>
           ) : null}
           {screen.mode === "practice" ? (
-            <span className="text-ink-faint text-sm">Practice rounds are never ranked and never cost anything.</span>
+            <span className="text-ink-soft text-xs font-bold">
+              Practice rounds are never ranked and never cost anything.
+            </span>
           ) : null}
         </Card>
 
@@ -156,8 +163,9 @@ export function Lobby() {
         {entryTx && screen.mode === "ranked" ? (
           <a
             href={DEEPLINKS.receipt(entryTx)}
-            className="border-line bg-paper-raised flex min-h-[52px] items-center justify-center rounded-2xl border text-sm font-semibold"
+            className="plate bevel pressable bg-panel flex min-h-13 items-center justify-center gap-2 text-sm font-black uppercase"
           >
+            <Icon name="coin" className="h-5 w-5" />
             View entry receipt
           </a>
         ) : null}
@@ -178,8 +186,10 @@ export function Lobby() {
         </div>
 
         <section>
-          <h2 className="mb-2 text-sm font-extrabold tracking-wide uppercase">This hour</h2>
-          <Leaderboard tournamentId={tournament?.id ?? null} highlightAlias={wallet.identity?.displayName} />
+          <Banner tone="grape">This Hour</Banner>
+          <div className="mt-2">
+            <Leaderboard tournamentId={tournament?.id ?? null} highlightAlias={wallet.identity?.displayName} />
+          </div>
         </section>
       </main>
     );
@@ -198,28 +208,28 @@ export function Lobby() {
         </Card>
       ) : (
         <>
-          <Card className="flex flex-col gap-4">
+          <Banner tone="cherry">This Hour&apos;s Game</Banner>
+
+          <Card className="flex flex-col gap-3">
             <div className="flex items-start justify-between gap-3">
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="bg-ink text-paper flex h-9 w-9 items-center justify-center rounded-xl text-sm font-extrabold">
-                    {meta.emoji}
-                  </span>
-                  <div>
-                    <h1 className="text-xl leading-tight font-extrabold">{meta.name}</h1>
-                    <p className="text-ink-faint text-xs">{meta.tagline}</p>
-                  </div>
+              <div className="flex items-center gap-2">
+                <span className="plate bevel-sm bg-grape flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl text-xl">
+                  {meta.emoji}
+                </span>
+                <div>
+                  <h1 className="text-xl leading-tight font-black tracking-tight uppercase">{meta.name}</h1>
+                  <p className="text-ink-soft text-xs font-bold">{meta.tagline}</p>
                 </div>
               </div>
-              <div className="text-right">
-                <div className="text-ink-faint text-[11px] font-semibold tracking-wide uppercase">Closes in</div>
-                <div className="text-xl">
+              <div className="plate bg-panel-sunk shrink-0 rounded-2xl px-2 py-1 text-center">
+                <div className="text-ink-soft text-[10px] font-black tracking-wide uppercase">Closes in</div>
+                <div className="text-lg font-black">
                   <Countdown endTime={tournament.endTime} onExpire={refresh} />
                 </div>
               </div>
             </div>
 
-            <p className="border-line text-ink-soft rounded-2xl border border-dashed px-3 py-2 text-xs leading-relaxed">
+            <p className="stitch text-ink-soft rounded-2xl px-3 py-2 text-xs leading-relaxed font-semibold">
               Everyone entering this hour plays the <strong>same board</strong>. No luck involved — the
               highest scores take the prize pool.
             </p>
@@ -255,19 +265,19 @@ export function Lobby() {
               </Button>
             ) : null}
 
-            <Button variant={wallet.address && tournament.playable ? "ghost" : "primary"} onClick={playFree}>
-              Play free
+            <Button variant={wallet.address && tournament.playable ? "ghost" : "go"} onClick={playFree}>
+              ▶ Play free
             </Button>
           </div>
 
           {tournament.playable ? (
-            <p className="text-ink-faint px-1 text-xs leading-relaxed">
+            <p className="text-panel/85 px-1 text-xs leading-relaxed font-semibold">
               Entering costs {tournament.entryPrice} {tournament.token.symbol} plus a small network fee, both
               paid in your stablecoin. {PLAYER_SHARE_PCT}% of the pool goes to the top three scores; the rest
               runs the arena.
             </p>
           ) : (
-            <p className="text-ink-faint px-1 text-xs leading-relaxed">
+            <p className="text-panel/85 px-1 text-xs leading-relaxed font-semibold">
               Paid tournaments are not running right now, but free practice always works.
             </p>
           )}
@@ -276,18 +286,18 @@ export function Lobby() {
 
           <Link
             href="/duel"
-            className="border-line bg-paper-raised flex min-h-[52px] items-center justify-between rounded-2xl border px-4"
+            className="plate bevel pressable bg-grape flex min-h-13 items-center justify-between gap-2 px-4 text-white"
           >
-            <span className="text-sm font-semibold">Challenge a friend to a duel</span>
-            <span className="text-vermilion text-sm font-bold">→</span>
+            <Icon name="swords" className="h-6 w-6 shrink-0" />
+            <span className="flex-1 text-sm font-black uppercase">Challenge a friend</span>
+            <span className="text-lg font-black">→</span>
           </Link>
 
           <section>
-            <div className="mb-2 flex items-baseline justify-between">
-              <h2 className="text-sm font-extrabold tracking-wide uppercase">Live standings</h2>
-              {tournament.id ? <span className="text-ink-faint text-xs">#{tournament.id}</span> : null}
+            <Banner tone="sky">Live Standings</Banner>
+            <div className="mt-2">
+              <Leaderboard tournamentId={tournament.id} highlightAlias={wallet.identity?.displayName} />
             </div>
-            <Leaderboard tournamentId={tournament.id} highlightAlias={wallet.identity?.displayName} />
           </section>
 
           {entryTx ? (
@@ -295,7 +305,7 @@ export function Lobby() {
               href={explorerTxUrl(entryTx)}
               target="_blank"
               rel="noopener noreferrer"
-              className="text-ink-faint px-1 text-xs underline underline-offset-2"
+              className="text-panel/80 px-1 text-xs font-bold underline underline-offset-2"
             >
               View your entry on the block explorer
             </a>
@@ -308,7 +318,8 @@ export function Lobby() {
 
 function NoticeBox({ message }: { message: string }) {
   return (
-    <div className="border-vermilion bg-vermilion-soft text-vermilion-dark animate-rise rounded-2xl border px-3 py-2 text-sm font-semibold">
+    <div className="plate bevel-sm bg-cherry animate-rise flex items-center gap-2 px-3 py-2 text-sm font-black text-white">
+      <Icon name="cross" className="h-5 w-5 shrink-0" />
       {message}
     </div>
   );
@@ -316,29 +327,32 @@ function NoticeBox({ message }: { message: string }) {
 
 function DepositPrompt() {
   return (
-    <div className="border-line bg-paper-raised flex flex-col gap-2 rounded-2xl border p-3">
-      <p className="text-sm font-semibold">Your balance is empty.</p>
-      <p className="text-ink-faint text-xs">
+    <Card className="flex flex-col gap-2">
+      <p className="flex items-center gap-2 text-sm font-black uppercase">
+        <Icon name="coin" className="h-5 w-5" />
+        Your balance is empty
+      </p>
+      <p className="text-ink-soft text-xs font-semibold">
         Add a digital dollar balance to enter paid tournaments. Free practice keeps working either way.
       </p>
       <a
         href={DEEPLINKS.addCash}
-        className="bg-vermilion active:bg-vermilion-dark flex min-h-[48px] items-center justify-center rounded-xl font-semibold text-white"
+        className="plate bevel pressable bg-lime flex min-h-12 items-center justify-center font-black text-white uppercase"
       >
         Deposit
       </a>
-    </div>
+    </Card>
   );
 }
 
 function OutsideMiniPayNotice() {
   return (
-    <div className="border-line bg-paper-raised rounded-2xl border p-3">
-      <p className="text-sm font-semibold">Open Clash in MiniPay to play for prizes.</p>
-      <p className="text-ink-faint mt-1 text-xs">
+    <Card className="flex flex-col gap-1">
+      <p className="text-sm font-black uppercase">Open Clash in MiniPay to play for prizes</p>
+      <p className="text-ink-soft text-xs font-semibold">
         You can practise here in any browser. Entering a tournament needs the MiniPay app.
       </p>
-    </div>
+    </Card>
   );
 }
 

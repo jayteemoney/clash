@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { PAYOUT_WEIGHTS } from "@/lib/tournament";
 import { avatarHue } from "@/lib/identity";
+import { Stars } from "./ui";
 
 export interface LeaderboardEntry {
   rank: number;
@@ -58,12 +59,12 @@ export function Leaderboard({
   }, [tournamentId, live]);
 
   if (!loaded) {
-    return <p className="text-ink-faint px-1 py-4 text-sm">Loading standings…</p>;
+    return <p className="text-panel px-1 py-4 text-sm font-black uppercase">Loading standings…</p>;
   }
 
   if (entries.length === 0) {
     return (
-      <p className="text-ink-faint px-1 py-4 text-sm">
+      <p className="text-panel px-1 py-4 text-sm font-bold">
         No scores yet this hour. Play a round and you are on the board.
       </p>
     );
@@ -77,28 +78,30 @@ export function Leaderboard({
         return (
           <li
             key={entry.address}
-            className={`flex items-center gap-3 rounded-2xl border px-3 py-2 ${
-              isYou ? "border-vermilion bg-vermilion-soft" : "border-line bg-paper-raised"
+            className={`plate bevel-sm flex items-center gap-2.5 px-3 py-2 ${
+              isYou ? "bg-gold" : "bg-panel"
             }`}
           >
-            <span className={`tabular w-6 text-sm font-extrabold ${paying ? "text-vermilion" : "text-ink-faint"}`}>
+            <span
+              className={`plate tabular flex h-7 w-7 shrink-0 items-center justify-center rounded-lg text-xs font-black ${
+                paying ? "bg-cherry text-white" : "bg-panel-sunk text-ink-soft"
+              }`}
+            >
               {entry.rank}
             </span>
             <span
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold text-white"
-              style={{ backgroundColor: `hsl(${avatarHue(entry.address)} 55% 42%)` }}
+              className="border-outline flex h-8 w-8 shrink-0 items-center justify-center rounded-full border-2 text-[11px] font-black text-white"
+              style={{ backgroundColor: `hsl(${avatarHue(entry.address)} 70% 50%)` }}
               aria-hidden
             >
               {entry.alias.slice(0, 2).toUpperCase()}
             </span>
-            <span className="flex-1 truncate text-sm font-semibold">
+            <span className="flex-1 truncate text-sm font-black">
               {entry.alias}
-              {isYou ? <span className="text-vermilion-dark ml-1 text-xs font-bold">you</span> : null}
+              {isYou ? <span className="text-cherry-dark ml-1 text-xs font-black uppercase">you</span> : null}
             </span>
-            {paying ? (
-              <span className="text-ink-faint text-[11px] font-semibold">{entry.shareWeight}%</span>
-            ) : null}
-            <span className="tabular text-sm font-extrabold">{entry.score}</span>
+            {paying ? <Stars count={PAYOUT_WEIGHTS.length - entry.rank + 1} /> : null}
+            <span className="tabular text-base font-black">{entry.score}</span>
           </li>
         );
       })}

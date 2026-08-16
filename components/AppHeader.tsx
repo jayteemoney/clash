@@ -14,25 +14,25 @@ export function AppHeader({ wallet }: { wallet: MiniPayState }) {
   const { identity, preferred } = wallet;
 
   return (
-    <header className="flex items-center justify-between px-4 pt-4 pb-2">
+    <header className="flex items-center justify-between gap-2 px-4 pt-4 pb-3">
       <Link href="/" className="flex items-center gap-2">
         <Logo />
-        <span className="text-lg font-extrabold tracking-tight">{APP_NAME}</span>
+        <span className="titled text-2xl text-gold">{APP_NAME}</span>
       </Link>
 
       {identity ? (
-        <div className="flex items-center gap-2">
-          <div className="text-right">
-            <div className="text-[11px] leading-tight font-semibold">{identity.displayName}</div>
+        <div className="plate bevel-sm bg-panel flex items-center gap-2 rounded-full py-1 pr-1 pl-3">
+          <div className="text-right leading-tight">
+            <div className="text-[11px] font-black">{identity.displayName}</div>
             {preferred ? (
-              <div className="tabular text-ink-faint text-[11px] leading-tight">
+              <div className="tabular text-ink-soft text-[11px] font-bold">
                 {formatAmount(preferred.raw, preferred.token.decimals)} {preferred.token.symbol}
               </div>
             ) : null}
           </div>
           <span
-            className="flex h-9 w-9 items-center justify-center rounded-full text-xs font-bold text-white"
-            style={{ backgroundColor: `hsl(${avatarHue(identity.address)} 55% 42%)` }}
+            className="border-outline flex h-9 w-9 items-center justify-center rounded-full border-[2.5px] text-xs font-black text-white"
+            style={{ backgroundColor: `hsl(${avatarHue(identity.address)} 70% 50%)` }}
             aria-hidden
           >
             {identity.initials}
@@ -45,10 +45,16 @@ export function AppHeader({ wallet }: { wallet: MiniPayState }) {
 
 function Logo() {
   return (
-    <svg width="26" height="26" viewBox="0 0 26 26" aria-hidden fill="none">
-      <rect width="26" height="26" rx="7" fill="#17150F" />
-      <path d="M7 8.5 13 5l6 3.5v9L13 21l-6-3.5v-9Z" fill="#D23517" />
-      <path d="M13 9.5 16.5 13 13 16.5 9.5 13 13 9.5Z" fill="#EAE8E1" />
+    <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden fill="none">
+      <rect x="1.5" y="1.5" width="31" height="31" rx="9" fill="var(--color-cherry)" stroke="var(--color-outline)" strokeWidth="3" />
+      <path
+        d="M17 7.5 25 12v10l-8 4.5L9 22V12l8-4.5Z"
+        fill="var(--color-gold)"
+        stroke="var(--color-outline)"
+        strokeWidth="2.5"
+        strokeLinejoin="round"
+      />
+      <path d="M17 13l4 4-4 4-4-4 4-4Z" fill="var(--color-panel)" stroke="var(--color-outline)" strokeWidth="2" strokeLinejoin="round" />
     </svg>
   );
 }
